@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Prayer Request Received</title>
+<style>
+  body { margin:0; padding:0; background:#f4f4f4; font-family:'Segoe UI',Arial,sans-serif; }
+  .wrapper { max-width:600px; margin:40px auto; background:#fff; border-radius:8px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.08); }
+  .header { background:linear-gradient(135deg,#1a1a2e,#0f3460); padding:36px 32px; text-align:center; }
+  .header h1 { color:#e2b04a; margin:0; font-size:22px; }
+  .body { padding:36px 32px; color:#444; }
+  .body h2 { color:#1a1a2e; margin-top:0; }
+  .verse { background:#f8f4eb; border-left:4px solid #e2b04a; padding:16px 20px; border-radius:4px; margin:20px 0; font-style:italic; color:#666; font-size:14px; line-height:1.7; }
+  .subject-badge { display:inline-block; background:#eee; color:#555; padding:4px 12px; border-radius:4px; font-size:13px; margin-bottom:16px; }
+  .footer { background:#f9f9f9; padding:20px 32px; text-align:center; font-size:12px; color:#999; }
+  .footer a { color:#e2b04a; text-decoration:none; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="header">
+    <h1>ClaudyGod Ministry</h1>
+  </div>
+  <div class="body">
+    <h2>Dear {{name}},</h2>
+    <p>We have received your prayer request and our intercession team will be praying for you.</p>
+    <p>Prayer subject: <span class="subject-badge">{{prayerSubject}}</span></p>
+    <div class="verse">
+      "Do not be anxious about anything, but in every situation, by prayer and petition, with thanksgiving, present your requests to God. And the peace of God, which transcends all understanding, will guard your hearts and your minds in Christ Jesus."<br/>
+      <strong>— Philippians 4:6–7</strong>
+    </div>
+    <p>Know that you are not alone. We stand with you in faith. If you need personal pastoral support, please reach out to us at <a href="mailto:prayer@claudygod.org">prayer@claudygod.org</a>.</p>
+    <p>God bless you! 🙏</p>
+  </div>
+  <div class="footer">
+    <p>&copy; 2025 ClaudyGod Ministry &nbsp;|&nbsp; <a href="https://claudygod.org">claudygod.org</a></p>
+  </div>
+</div>
+</body>
+</html>

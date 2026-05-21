@@ -1,0 +1,6 @@
+@ClaudyGod.API_HostAddress = http://localhost:5278
+
+GET {{ClaudyGod.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
