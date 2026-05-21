@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Message Received</title>
+<style>
+  body { margin:0; padding:0; background:#f4f4f4; font-family:'Segoe UI',Arial,sans-serif; }
+  .wrapper { max-width:600px; margin:40px auto; background:#fff; border-radius:8px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.08); }
+  .header { background:linear-gradient(135deg,#1a1a2e,#0f3460); padding:36px 32px; text-align:center; }
+  .header h1 { color:#e2b04a; margin:0; font-size:22px; }
+  .body { padding:36px 32px; color:#444; }
+  .body h2 { color:#1a1a2e; margin-top:0; }
+  .quote-box { background:#f8f8f8; border-left:4px solid #e2b04a; padding:16px 20px; border-radius:4px; margin:20px 0; font-style:italic; color:#666; font-size:14px; line-height:1.6; }
+  .footer { background:#f9f9f9; padding:20px 32px; text-align:center; font-size:12px; color:#999; }
+  .footer a { color:#e2b04a; text-decoration:none; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="header">
+    <h1>ClaudyGod Ministry</h1>
+  </div>
+  <div class="body">
+    <h2>Hello {{name}},</h2>
+    <p>Thank you for reaching out to us! We have received your message and will get back to you within <strong>24–48 hours</strong>.</p>
+    <p>Here's a copy of your message:</p>
+    <div class="quote-box">{{message}}</div>
+    <p>If your matter is urgent, please email us at <a href="mailto:info@claudygod.org">info@claudygod.org</a>.</p>
+    <p>God bless you!</p>
+  </div>
+  <div class="footer">
+    <p>&copy; 2025 ClaudyGod Ministry &nbsp;|&nbsp; <a href="https://claudygod.org">claudygod.org</a></p>
+  </div>
+</div>
+</body>
+</html>

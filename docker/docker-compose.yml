@@ -1,0 +1,129 @@
+name: claudygod
+
+services:
+  traefik:
+    image: traefik:v3.1
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/traefik.yml:ro
+      - ./traefik/acme.json:/acme.json
+    networks:
+      - traefik-public
+    labels:
+      - "traefik.enable=false"
+
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=${ConnectionStrings__DefaultConnection}
+      - Redis__ConnectionString=redis:6379
+      - Redis__InstanceName=claudygod:
+      - Jwt__Key=${Jwt__Key}
+      - Jwt__Issuer=ClaudyGod.API
+      - Jwt__Audience=ClaudyGod.Client
+      - Jwt__AccessTokenExpiryMinutes=60
+      - Jwt__RefreshTokenExpiryDays=7
+      - Email__SmtpHost=${Email__SmtpHost:-smtp.gmail.com}
+      - Email__SmtpPort=${Email__SmtpPort:-587}
+      - Email__SmtpUsername=${Email__SmtpUsername}
+      - Email__SmtpPassword=${Email__SmtpPassword}
+      - Email__SenderEmail=${Email__SmtpUsername}
+      - Email__SenderName=ClaudyGod Ministry
+      - Email__AdminEmail=${Email__AdminEmail}
+      - Email__EnableSsl=true
+      - Email__UsePostfix=false
+      - FileStorage__LocalBasePath=/app/uploads
+      - FileStorage__BaseUrl=/uploads
+      - FileStorage__MaxFileSizeMb=50
+      - Encryption__Key=${Encryption__Key}
+      - Cors__Origins__0=https://${DOMAIN}
+      - Cors__Origins__1=https://www.${DOMAIN}
+      - Cors__Origins__2=https://admin.${DOMAIN}
+    volumes:
+      - api_uploads:/app/uploads
+      - api_logs:/app/logs
+    networks:
+      - traefik-public
+      - internal
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.claudygod-api.rule=Host(`${API_DOMAIN}`)"
+      - "traefik.http.routers.claudygod-api.entrypoints=websecure"
+      - "traefik.http.routers.claudygod-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.claudygod-api.loadbalancer.server.port=8080"
+      - "traefik.http.middlewares.api-headers.headers.stsSeconds=31536000"
+      - "traefik.http.middlewares.api-headers.headers.stsIncludeSubdomains=true"
+      - "traefik.http.middlewares.api-headers.headers.stsPreload=true"
+      - "traefik.http.middlewares.api-headers.headers.frameDeny=true"
+      - "traefik.http.middlewares.api-headers.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.api-headers.headers.referrerPolicy=strict-origin-when-cross-origin"
+      - "traefik.http.routers.claudygod-api.middlewares=api-headers"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  migrate:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: on-failure
+    command: ["dotnet", "ClaudyGod.API.dll", "--migrate"]
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=${ConnectionStrings__DefaultConnection}
+    networks:
+      - internal
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --save ""
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postfix:
+    image: boky/postfix:latest
+    restart: unless-stopped
+    environment:
+      - ALLOWED_SENDER_DOMAINS=${DOMAIN}
+      - SMTP_SERVER=${Email__SmtpHost:-smtp.gmail.com}
+      - SMTP_PORT=${Email__SmtpPort:-587}
+      - SMTP_USERNAME=${Email__SmtpUsername}
+      - SMTP_PASSWORD=${Email__SmtpPassword}
+    networks:
+      - internal
+
+volumes:
+  redis_data:
+  api_uploads:
+  api_logs:
+
+networks:
+  traefik-public:
+    external: true
+  internal:
+    driver: bridge
+    internal: true

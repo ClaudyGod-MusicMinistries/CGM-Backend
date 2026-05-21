@@ -1,0 +1,57 @@
+# Build outputs
+bin/
+obj/
+out/
+
+# Visual Studio / Rider
+.vs/
+.vscode/settings.json
+*.user
+*.suo
+*.rsuser
+*.DotSettings.user
+.idea/
+
+# Logs
+logs/
+*.log
+
+# Uploads (runtime data)
+uploads/
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# dotnet tools
+.config/dotnet-tools.json
+
+# Local settings overrides (contain secrets)
+appsettings.*.local.json
+appsettings.Development.json
+
+# Docker secrets
+docker/.env
+docker/traefik/acme.json
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Test results
+TestResults/
+coverage/
+*.trx
+*.coveragexml
+
+# Entity Framework migrations (keep the folder, exclude sensitive generated sql)
+*.sql
+
+# Published output
+publish/

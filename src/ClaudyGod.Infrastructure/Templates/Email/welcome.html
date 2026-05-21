@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Welcome to ClaudyGod Community</title>
+<style>
+  body { margin:0; padding:0; background:#f4f4f4; font-family:'Segoe UI',Arial,sans-serif; }
+  .wrapper { max-width:600px; margin:40px auto; background:#ffffff; border-radius:8px; overflow:hidden; box-shadow:0 2px 8px rgba(0,0,0,0.08); }
+  .header { background:linear-gradient(135deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%); padding:40px 32px; text-align:center; }
+  .header img { height:60px; margin-bottom:12px; }
+  .header h1 { color:#e2b04a; margin:0; font-size:24px; letter-spacing:1px; }
+  .header p { color:#ccc; margin:8px 0 0; font-size:13px; }
+  .body { padding:40px 32px; color:#333; }
+  .body h2 { color:#1a1a2e; margin-top:0; }
+  .body p { line-height:1.7; color:#555; }
+  .cta-btn { display:inline-block; margin:24px 0; padding:14px 32px; background:#e2b04a; color:#1a1a2e; text-decoration:none; border-radius:6px; font-weight:700; font-size:15px; }
+  .divider { border:none; border-top:1px solid #eee; margin:32px 0; }
+  .footer { background:#f9f9f9; padding:24px 32px; text-align:center; font-size:12px; color:#999; }
+  .footer a { color:#e2b04a; text-decoration:none; }
+  .unsub { font-size:11px; color:#bbb; margin-top:8px; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="header">
+    <h1>ClaudyGod Ministry</h1>
+    <p>Spreading the gospel through music and grace</p>
+  </div>
+  <div class="body">
+    <h2>Welcome, {{name}}! 🎶</h2>
+    <p>Thank you for joining the ClaudyGod community. We're thrilled to have you as part of this Spirit-led family.</p>
+    <p>As a subscriber, you'll be the first to know about:</p>
+    <ul>
+      <li>New music releases and albums</li>
+      <li>Upcoming events and concerts</li>
+      <li>Exclusive behind-the-scenes content</li>
+      <li>Ministry news and devotionals</li>
+    </ul>
+    <a class="cta-btn" href="https://claudygod.org">Visit Our Website</a>
+    <hr class="divider" />
+    <p style="font-size:13px;">If you did not sign up for this newsletter, you can safely ignore this email or unsubscribe below.</p>
+  </div>
+  <div class="footer">
+    <p>&copy; 2025 ClaudyGod Ministry. All rights reserved.</p>
+    <p><a href="https://claudygod.org">claudygod.org</a></p>
+    <p class="unsub">
+      <a href="https://claudygod.org/unsubscribe?email={{unsubscribeEmail}}&token={{unsubscribeToken}}">Unsubscribe</a>
+      &nbsp;|&nbsp; This is an automated message, please do not reply.
+    </p>
+  </div>
+</div>
+</body>
+</html>
