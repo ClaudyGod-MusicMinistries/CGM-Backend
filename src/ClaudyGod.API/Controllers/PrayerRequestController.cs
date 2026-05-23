@@ -9,7 +9,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace ClaudyGod.API.Controllers;
 
 [ApiController]
-[Route("api/prayer-requests")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/prayer-requests")]
 public class PrayerRequestController : ControllerBase
 {
     private readonly IMediator _mediator;

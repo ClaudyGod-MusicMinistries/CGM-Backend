@@ -10,7 +10,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace ClaudyGod.API.Controllers;
 
 [ApiController]
-[Route("api/tickets")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/tickets")]
 public class TicketController : ControllerBase
 {
     private readonly IMediator _mediator;

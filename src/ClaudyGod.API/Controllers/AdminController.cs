@@ -7,7 +7,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace ClaudyGod.API.Controllers;
 
 [ApiController]
-[Route("api/admin")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/admin")]
 [Authorize(Roles = "Admin,SuperAdmin")]
 public class AdminController : ControllerBase
 {
