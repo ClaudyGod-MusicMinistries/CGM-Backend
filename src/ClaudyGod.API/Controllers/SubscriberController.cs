@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using ClaudyGod.Application.Common.Models;
 using ClaudyGod.Application.Features.Subscribers.Commands;
 using ClaudyGod.Application.Features.Subscribers.DTOs;
