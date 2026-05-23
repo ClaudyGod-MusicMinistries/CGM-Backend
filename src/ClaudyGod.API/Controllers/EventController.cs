@@ -50,7 +50,11 @@ public class EventController : ControllerBase
     public async Task<ActionResult<ApiResponse>> UpdateStatus(
         Guid id, [FromBody] UpdateEventStatusRequest dto, CancellationToken ct)
     {
-        await _mediator.Send(new UpdateEventStatusCommand(id, dto.Status), ct);
+        if (!Enum.TryParse<EventStatus>(dto.Status, ignoreCase: true, out var parsed))
+            return BadRequest(ApiResponse.Fail(
+                $"Invalid event status '{dto.Status}'. Valid values: {string.Join(", ", Enum.GetNames<EventStatus>())}"));
+
+        await _mediator.Send(new UpdateEventStatusCommand(id, parsed.ToString()), ct);
         return Ok(ApiResponse.Ok("Event status updated."));
     }
 }

@@ -103,22 +103,30 @@ try
         });
     });
 
-    // CORS
-    var allowedOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>()
-        ?? ["http://localhost:3000"];
+    // CORS — origins must be explicitly configured; no insecure localhost fallback in production
+    var allowedOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>();
+    if (allowedOrigins is null || allowedOrigins.Length == 0)
+    {
+        if (builder.Environment.IsProduction())
+            throw new InvalidOperationException("Cors:Origins must be configured for production.");
+        allowedOrigins = ["http://localhost:3000", "http://localhost:3001"];
+    }
 
     builder.Services.AddCors(options =>
     {
         options.AddPolicy("AllowFrontend", policy =>
             policy.WithOrigins(allowedOrigins)
-                  .AllowAnyHeader()
-                  .AllowAnyMethod()
+                  .WithHeaders("Content-Type", "Authorization", "Accept", "X-Requested-With")
+                  .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                   .AllowCredentials());
     });
 
     // JWT Authentication
     var jwtKey = builder.Configuration["Jwt:Key"]
         ?? throw new InvalidOperationException("Jwt:Key is required.");
+
+    if (System.Text.Encoding.UTF8.GetByteCount(jwtKey) < 32)
+        throw new InvalidOperationException("Jwt:Key must be at least 32 bytes for HmacSha256.");
 
     builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         .AddJwtBearer(options =>
@@ -167,15 +175,19 @@ try
     builder.Services.AddRateLimiter(options =>
     {
         options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
-            RateLimitPartition.GetFixedWindowLimiter(
-                ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                _ => new FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = permitLimit,
-                    Window = TimeSpan.FromSeconds(windowSeconds),
-                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                    QueueLimit = 5
-                }));
+        {
+            // Respect X-Forwarded-For when behind a reverse proxy / load balancer
+            var ip = ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
+                     ?? ctx.Connection.RemoteIpAddress?.ToString()
+                     ?? "unknown";
+            return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = permitLimit,
+                Window = TimeSpan.FromSeconds(windowSeconds),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 5
+            });
+        });
 
         options.OnRejected = async (ctx, token) =>
         {
@@ -192,8 +204,12 @@ try
 
     app.UseSerilogRequestLogging();
 
-    app.UseSwagger();
-    app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "ClaudyGod API v1"));
+    // Swagger available in non-production environments only
+    if (!app.Environment.IsProduction())
+    {
+        app.UseSwagger();
+        app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "ClaudyGod API v1"));
+    }
 
     app.UseMiddleware<ExceptionMiddleware>();
 
