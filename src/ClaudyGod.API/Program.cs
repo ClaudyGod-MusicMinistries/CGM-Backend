@@ -116,9 +116,10 @@ try
     {
         options.AddPolicy("AllowFrontend", policy =>
             policy.WithOrigins(allowedOrigins)
-                  .WithHeaders("Content-Type", "Authorization", "Accept", "X-Requested-With")
+                  .WithHeaders("Content-Type", "Authorization", "Accept", "X-Requested-With", "X-CSRF-Token")
                   .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-                  .AllowCredentials());
+                  .AllowCredentials()
+                  .SetPreflightMaxAge(TimeSpan.FromMinutes(10)));
     });
 
     // JWT Authentication
@@ -174,9 +175,9 @@ try
 
     builder.Services.AddRateLimiter(options =>
     {
+        // Global per-IP limiter
         options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
         {
-            // Respect X-Forwarded-For when behind a reverse proxy / load balancer
             var ip = ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
                      ?? ctx.Connection.RemoteIpAddress?.ToString()
                      ?? "unknown";
@@ -189,11 +190,47 @@ try
             });
         });
 
+        // Strict limiter for AI endpoints — 10 requests/minute per IP
+        options.AddPolicy("ai", ctx =>
+        {
+            var ip = ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
+                     ?? ctx.Connection.RemoteIpAddress?.ToString()
+                     ?? "unknown";
+            return RateLimitPartition.GetFixedWindowLimiter($"ai:{ip}", _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+        });
+
+        // Strict limiter for auth endpoints — 10 attempts/5 minutes per IP
+        options.AddPolicy("auth", ctx =>
+        {
+            var ip = ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
+                     ?? ctx.Connection.RemoteIpAddress?.ToString()
+                     ?? "unknown";
+            return RateLimitPartition.GetFixedWindowLimiter($"auth:{ip}", _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(5),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+        });
+
         options.OnRejected = async (ctx, token) =>
         {
             ctx.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
             ctx.HttpContext.Response.ContentType = "application/json";
-            var json = JsonSerializer.Serialize(new { success = false, message = "Rate limit exceeded. Please try again later." });
+            var retryAfter = ctx.Lease.TryGetMetadata(MetadataName.RetryAfter, out var r) ? (int)r.TotalSeconds : 60;
+            ctx.HttpContext.Response.Headers["Retry-After"] = retryAfter.ToString();
+            var json = JsonSerializer.Serialize(new
+            {
+                success = false,
+                message = $"Rate limit exceeded. Please retry after {retryAfter} seconds."
+            });
             await ctx.HttpContext.Response.WriteAsync(json, token);
         };
     });
@@ -211,6 +248,7 @@ try
         app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "ClaudyGod API v1"));
     }
 
+    app.UseMiddleware<SecurityHeadersMiddleware>();
     app.UseMiddleware<ExceptionMiddleware>();
 
     app.UseHttpsRedirection();
