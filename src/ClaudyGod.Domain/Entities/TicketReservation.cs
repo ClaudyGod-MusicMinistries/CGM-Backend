@@ -1,4 +1,5 @@
 using ClaudyGod.Domain.Enums;
+using ClaudyGod.Domain.Exceptions;
 
 namespace ClaudyGod.Domain.Entities;
 
@@ -33,6 +34,10 @@ public class TicketReservation : AuditableEntity
 
     public void CheckIn(string checkedInBy)
     {
+        if (Status != TicketStatus.Reserved)
+            throw new Exceptions.DomainException(
+                $"Cannot check in a ticket with status '{Status}'. Only Reserved tickets can be checked in.");
+
         Status = TicketStatus.CheckedIn;
         CheckedInAt = DateTime.UtcNow;
         CheckedInBy = checkedInBy;

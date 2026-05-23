@@ -23,14 +23,7 @@ public interface IApplicationDbContext
     DbSet<User> Users { get; }
     DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<AuditLog> AuditLogs { get; }
-    DbSet<Testimonial> Testimonials { get; }
-    DbSet<LeadershipMember> LeadershipMembers { get; }
     DbSet<Reel> Reels { get; }
-    DbSet<GivingOption> GivingOptions { get; }
-    DbSet<GivingIntent> GivingIntents { get; }
-    DbSet<ContentItem> ContentItems { get; }
-    DbSet<WorkforceApplication> WorkforceApplications { get; }
-    DbSet<PastoralCareRequest> PastoralCareRequests { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

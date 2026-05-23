@@ -22,6 +22,10 @@ public class JwtService : IJwtService
     {
         _config = config;
         _key = config["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key is required.");
+
+        if (Encoding.UTF8.GetByteCount(_key) < 32)
+            throw new InvalidOperationException("Jwt:Key must be at least 32 bytes for HmacSha256.");
+
         _issuer = config["Jwt:Issuer"] ?? "ClaudyGod.API";
         _audience = config["Jwt:Audience"] ?? "ClaudyGod.Client";
         _accessTokenExpiryMinutes = int.TryParse(config["Jwt:AccessTokenExpiryMinutes"], out var m) ? m : 60;

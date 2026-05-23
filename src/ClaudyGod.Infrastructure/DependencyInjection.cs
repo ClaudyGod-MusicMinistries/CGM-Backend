@@ -31,6 +31,12 @@ public static class DependencyInjection
         services.AddScoped<IEncryptionService, EncryptionService>();
         services.AddScoped<IAuditService, AuditService>();
 
+        // AI service — typed HttpClient with 30-second timeout
+        services.AddHttpClient<IAIService, ClaudeAIService>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
+
         services.AddHttpContextAccessor();
 
         return services;

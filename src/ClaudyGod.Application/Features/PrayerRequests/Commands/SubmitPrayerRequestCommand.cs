@@ -2,6 +2,7 @@ using ClaudyGod.Application.Common.Interfaces;
 using ClaudyGod.Domain.Entities;
 using FluentValidation;
 using MediatR;
+using Microsoft.Extensions.Logging;
 
 namespace ClaudyGod.Application.Features.PrayerRequests.Commands;
 
@@ -13,10 +14,18 @@ public class SubmitPrayerRequestCommandValidator : AbstractValidator<SubmitPraye
 {
     public SubmitPrayerRequestCommandValidator()
     {
-        RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
-        RuleFor(x => x.Email).NotEmpty().EmailAddress();
-        RuleFor(x => x.Subject).NotEmpty().MaximumLength(300);
-        RuleFor(x => x.RequestText).NotEmpty().MaximumLength(5000);
+        RuleFor(x => x.Name)
+            .NotEmpty().WithMessage("Name is required.")
+            .MaximumLength(100);
+        RuleFor(x => x.Email)
+            .NotEmpty().WithMessage("Email is required.")
+            .EmailAddress().WithMessage("A valid email address is required.");
+        RuleFor(x => x.Subject)
+            .NotEmpty().WithMessage("Subject is required.")
+            .MaximumLength(300);
+        RuleFor(x => x.RequestText)
+            .NotEmpty().WithMessage("Prayer request details are required.")
+            .MaximumLength(5000);
     }
 }
 
@@ -24,11 +33,16 @@ public class SubmitPrayerRequestCommandHandler : IRequestHandler<SubmitPrayerReq
 {
     private readonly IApplicationDbContext _db;
     private readonly IEmailService _email;
+    private readonly ILogger<SubmitPrayerRequestCommandHandler> _logger;
 
-    public SubmitPrayerRequestCommandHandler(IApplicationDbContext db, IEmailService email)
+    public SubmitPrayerRequestCommandHandler(
+        IApplicationDbContext db,
+        IEmailService email,
+        ILogger<SubmitPrayerRequestCommandHandler> logger)
     {
         _db = db;
         _email = email;
+        _logger = logger;
     }
 
     public async Task<Guid> Handle(SubmitPrayerRequestCommand request, CancellationToken ct)
@@ -39,12 +53,12 @@ public class SubmitPrayerRequestCommandHandler : IRequestHandler<SubmitPrayerReq
         _db.PrayerRequests.Add(prayerRequest);
         await _db.SaveChangesAsync(ct);
 
-        await _email.SendFromTemplateAsync(request.Email, "prayer-received", new Dictionary<string, string>
+        await _email.TrySendFromTemplateAsync(request.Email, "prayer-received", new Dictionary<string, string>
         {
-            ["subject"] = "Your Prayer Request Has Been Received",
+            ["subject"] = "Your Prayer Request Has Been Received – ClaudyGod Ministry",
             ["name"] = request.Name,
             ["prayerSubject"] = request.Subject
-        }, ct);
+        }, _logger, ct);
 
         return prayerRequest.Id;
     }

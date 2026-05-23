@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using ClaudyGod.Application.Common.Models;
 using ClaudyGod.Application.Features.Bookings.Commands;
 using ClaudyGod.Application.Features.Bookings.DTOs;

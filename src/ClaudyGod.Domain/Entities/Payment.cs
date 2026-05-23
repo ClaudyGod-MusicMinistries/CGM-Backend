@@ -11,7 +11,6 @@ public class Payment : AuditableEntity
     public PaymentMethod PaymentMethod { get; private set; }
     public PaymentStatus Status { get; private set; } = PaymentStatus.Pending;
     public Guid OrderId { get; private set; }
-    public Order Order { get; private set; } = null!;
 
     protected Payment() { }
 
