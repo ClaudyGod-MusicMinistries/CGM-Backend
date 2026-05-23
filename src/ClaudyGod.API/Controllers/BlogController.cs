@@ -10,7 +10,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace ClaudyGod.API.Controllers;
 
 [ApiController]
-[Route("api/blog")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/blog")]
 public class BlogController : ControllerBase
 {
     private readonly IMediator _mediator;

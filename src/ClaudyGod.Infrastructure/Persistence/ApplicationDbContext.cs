@@ -15,8 +15,6 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<ZellePayment> ZellePayments => Set<ZellePayment>();
     public DbSet<NigerianBankTransfer> NigerianBankTransfers => Set<NigerianBankTransfer>();
     public DbSet<Payment> Payments => Set<Payment>();
-    public DbSet<Order> Orders => Set<Order>();
-    public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<PrayerRequest> PrayerRequests => Set<PrayerRequest>();
     public DbSet<MediaItem> MediaItems => Set<MediaItem>();
     public DbSet<BlogPost> BlogPosts => Set<BlogPost>();
@@ -28,6 +26,14 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<Testimonial> Testimonials => Set<Testimonial>();
+    public DbSet<LeadershipMember> LeadershipMembers => Set<LeadershipMember>();
+    public DbSet<Reel> Reels => Set<Reel>();
+    public DbSet<GivingOption> GivingOptions => Set<GivingOption>();
+    public DbSet<GivingIntent> GivingIntents => Set<GivingIntent>();
+    public DbSet<ContentItem> ContentItems => Set<ContentItem>();
+    public DbSet<WorkforceApplication> WorkforceApplications => Set<WorkforceApplication>();
+    public DbSet<PastoralCareRequest> PastoralCareRequests => Set<PastoralCareRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -44,8 +50,15 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
         modelBuilder.Entity<BlogPost>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Event>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<TicketReservation>().HasQueryFilter(e => !e.IsDeleted);
-        modelBuilder.Entity<Order>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<User>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Testimonial>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<LeadershipMember>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Reel>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<GivingOption>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<GivingIntent>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<ContentItem>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<WorkforceApplication>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<PastoralCareRequest>().HasQueryFilter(e => !e.IsDeleted);
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

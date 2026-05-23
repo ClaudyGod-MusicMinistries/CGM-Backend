@@ -10,7 +10,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace ClaudyGod.API.Controllers;
 
 [ApiController]
-[Route("api/media")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/media")]
 public class MediaController : ControllerBase
 {
     private readonly IMediator _mediator;

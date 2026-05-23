@@ -8,7 +8,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace ClaudyGod.API.Controllers;
 
 [ApiController]
-[Route("api/contacts")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/contacts")]
 public class ContactController : ControllerBase
 {
     private readonly IMediator _mediator;

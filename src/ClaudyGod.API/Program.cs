@@ -3,10 +3,12 @@ using System.Threading.RateLimiting;
 using Asp.Versioning;
 using ClaudyGod.Application;
 using ClaudyGod.Infrastructure;
+using ClaudyGod.Infrastructure.Persistence;
 using ClaudyGod.API.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
@@ -21,6 +23,25 @@ Log.Logger = new LoggerConfiguration()
 
 try
 {
+    // Handle migration-only mode (used by docker-compose migrate service)
+    if (args.Contains("--migrate"))
+    {
+        var migrateHost = Host.CreateDefaultBuilder(args)
+            .ConfigureServices((ctx, services) =>
+            {
+                services.AddDbContext<ApplicationDbContext>(options =>
+                    options.UseNpgsql(ctx.Configuration.GetConnectionString("DefaultConnection")));
+            })
+            .Build();
+
+        using var scope = migrateHost.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Log.Information("Applying database migrations...");
+        await db.Database.MigrateAsync();
+        Log.Information("Migrations applied successfully.");
+        return;
+    }
+
     var builder = WebApplication.CreateBuilder(args);
 
     // Serilog
@@ -52,10 +73,10 @@ try
         options.SubstituteApiVersionInUrl = true;
     });
 
-    // Swagger with JWT support
+    // Swagger (enabled in all environments for self-documenting API)
     builder.Services.AddSwaggerGen(c =>
     {
-        c.SwaggerDoc("v1", new() { Title = "ClaudyGod API", Version = "v1", Description = "ClaudyGod Ministry Backend API" });
+        c.SwaggerDoc("v1", new() { Title = "ClaudyGod Ministry API", Version = "v1", Description = "Production API for ClaudyGod Ministry" });
         c.AddSecurityDefinition("Bearer", new()
         {
             Name = "Authorization",
@@ -75,13 +96,13 @@ try
     });
 
     // CORS
-    var allowedOriginsRaw = builder.Configuration.GetSection("Cors:Origins").Get<string[]>()
+    var allowedOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>()
         ?? ["http://localhost:3000"];
 
     builder.Services.AddCors(options =>
     {
         options.AddPolicy("AllowFrontend", policy =>
-            policy.WithOrigins(allowedOriginsRaw)
+            policy.WithOrigins(allowedOrigins)
                   .AllowAnyHeader()
                   .AllowAnyMethod()
                   .AllowCredentials());
@@ -124,7 +145,7 @@ try
             builder.Configuration.GetConnectionString("DefaultConnection")!,
             name: "database",
             failureStatus: HealthStatus.Unhealthy,
-            tags: ["db", "sql"])
+            tags: ["db"])
         .AddRedis(
             redisConn,
             name: "redis",
@@ -163,11 +184,8 @@ try
 
     app.UseSerilogRequestLogging();
 
-    if (app.Environment.IsDevelopment())
-    {
-        app.UseSwagger();
-        app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "ClaudyGod API v1"));
-    }
+    app.UseSwagger();
+    app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "ClaudyGod API v1"));
 
     app.UseMiddleware<ExceptionMiddleware>();
 
@@ -182,7 +200,7 @@ try
 
     app.MapControllers();
 
-    // Health endpoints
+    // Health check endpoint
     app.MapHealthChecks("/healthz", new HealthCheckOptions
     {
         ResponseWriter = async (context, report) =>
@@ -202,9 +220,6 @@ try
             await context.Response.WriteAsync(result);
         }
     });
-
-    app.MapGet("/health", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
-       .WithName("HealthCheck").WithTags("Health").ExcludeFromDescription();
 
     Log.Information("ClaudyGod API starting...");
     await app.RunAsync();

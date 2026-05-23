@@ -10,7 +10,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace ClaudyGod.API.Controllers;
 
 [ApiController]
-[Route("api/events")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/events")]
 public class EventController : ControllerBase
 {
     private readonly IMediator _mediator;

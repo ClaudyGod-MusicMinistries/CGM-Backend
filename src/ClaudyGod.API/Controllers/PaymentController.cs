@@ -6,7 +6,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace ClaudyGod.API.Controllers;
 
 [ApiController]
-[Route("api/payments")]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/payments")]
 public class PaymentController : ControllerBase
 {
     private readonly IMediator _mediator;
