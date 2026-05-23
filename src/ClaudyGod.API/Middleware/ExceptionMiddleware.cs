@@ -58,7 +58,7 @@ public class ExceptionMiddleware
             case ValidationException ve:
                 statusCode = HttpStatusCode.UnprocessableEntity;
                 message = "Validation failed. Please correct the highlighted fields.";
-                fieldErrors = ve.Errors;
+                fieldErrors = new Dictionary<string, string[]>(ve.Errors);
                 errors = ve.Errors.SelectMany(e => e.Value);
                 break;
 
