@@ -1,3 +1,7 @@
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
 entryPoints:
   web:
     address: ":80"
@@ -7,34 +11,67 @@ entryPoints:
           to: websecure
           scheme: https
           permanent: true
+
   websecure:
     address: ":443"
+    http:
+      tls:
+        options: modern
+      middlewares:
+        - secureHeaders@file
+        - compression@file
 
+# ── TLS options ──────────────────────────────────────────────────────────────
+tls:
+  options:
+    modern:
+      minVersion: VersionTLS12
+      cipherSuites:
+        - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
+        - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+      sniStrict: true
+    legacy:
+      minVersion: VersionTLS12
+
+# ── Providers ────────────────────────────────────────────────────────────────
 providers:
   docker:
     exposedByDefault: false
     network: traefik-public
     endpoint: "unix:///var/run/docker.sock"
     watch: true
+  file:
+    filename: /dynamic.yml
+    watch: true
 
+# ── Certificate resolver (Let's Encrypt) ─────────────────────────────────────
 certificatesResolvers:
   letsencrypt:
     acme:
       email: "${ACME_EMAIL}"
       storage: /acme.json
-      httpChallenge:
-        entryPoint: web
+      keyType: EC384
+      tlsChallenge: {}
 
+# ── API / Dashboard ──────────────────────────────────────────────────────────
 api:
   dashboard: false
   insecure: false
 
+# ── Logging ──────────────────────────────────────────────────────────────────
 log:
-  level: INFO
+  level: WARN
   format: json
 
 accessLog:
   format: json
+  bufferingSize: 100
   filters:
     statusCodes:
       - "400-599"
+    retryAttempts: true
+    minDuration: "100ms"

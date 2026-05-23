@@ -45,5 +45,6 @@ public class User : AuditableEntity
     }
 
     public bool IsPasswordResetTokenValid(string token) =>
-        PasswordResetToken == token && PasswordResetTokenExpiry > DateTime.UtcNow;
+        string.Equals(PasswordResetToken, token, StringComparison.Ordinal)
+        && PasswordResetTokenExpiry > DateTime.UtcNow;
 }

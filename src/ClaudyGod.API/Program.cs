@@ -14,6 +14,7 @@ using Microsoft.IdentityModel.Tokens;
 using Serilog;
 using Serilog.Events;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
@@ -58,7 +59,14 @@ try
     builder.Services.AddInfrastructure(builder.Configuration);
 
     // Controllers
-    builder.Services.AddControllers();
+    builder.Services.AddControllers()
+        .AddJsonOptions(options =>
+        {
+            options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+            options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+            options.JsonSerializerOptions.DictionaryKeyPolicy = JsonNamingPolicy.CamelCase;
+            options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+        });
     builder.Services.AddEndpointsApiExplorer();
 
     // API Versioning
@@ -95,22 +103,31 @@ try
         });
     });
 
-    // CORS
-    var allowedOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>()
-        ?? ["http://localhost:3000"];
+    // CORS — origins must be explicitly configured; no insecure localhost fallback in production
+    var allowedOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>();
+    if (allowedOrigins is null || allowedOrigins.Length == 0)
+    {
+        if (builder.Environment.IsProduction())
+            throw new InvalidOperationException("Cors:Origins must be configured for production.");
+        allowedOrigins = ["http://localhost:3000", "http://localhost:3001"];
+    }
 
     builder.Services.AddCors(options =>
     {
         options.AddPolicy("AllowFrontend", policy =>
             policy.WithOrigins(allowedOrigins)
-                  .AllowAnyHeader()
-                  .AllowAnyMethod()
-                  .AllowCredentials());
+                  .WithHeaders("Content-Type", "Authorization", "Accept", "X-Requested-With", "X-CSRF-Token")
+                  .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+                  .AllowCredentials()
+                  .SetPreflightMaxAge(TimeSpan.FromMinutes(10)));
     });
 
     // JWT Authentication
     var jwtKey = builder.Configuration["Jwt:Key"]
         ?? throw new InvalidOperationException("Jwt:Key is required.");
+
+    if (System.Text.Encoding.UTF8.GetByteCount(jwtKey) < 32)
+        throw new InvalidOperationException("Jwt:Key must be at least 32 bytes for HmacSha256.");
 
     builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         .AddJwtBearer(options =>
@@ -158,22 +175,62 @@ try
 
     builder.Services.AddRateLimiter(options =>
     {
+        // Global per-IP limiter
         options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
-            RateLimitPartition.GetFixedWindowLimiter(
-                ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown",
-                _ => new FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = permitLimit,
-                    Window = TimeSpan.FromSeconds(windowSeconds),
-                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                    QueueLimit = 5
-                }));
+        {
+            var ip = ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
+                     ?? ctx.Connection.RemoteIpAddress?.ToString()
+                     ?? "unknown";
+            return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = permitLimit,
+                Window = TimeSpan.FromSeconds(windowSeconds),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 5
+            });
+        });
+
+        // Strict limiter for AI endpoints — 10 requests/minute per IP
+        options.AddPolicy("ai", ctx =>
+        {
+            var ip = ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
+                     ?? ctx.Connection.RemoteIpAddress?.ToString()
+                     ?? "unknown";
+            return RateLimitPartition.GetFixedWindowLimiter($"ai:{ip}", _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+        });
+
+        // Strict limiter for auth endpoints — 10 attempts/5 minutes per IP
+        options.AddPolicy("auth", ctx =>
+        {
+            var ip = ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
+                     ?? ctx.Connection.RemoteIpAddress?.ToString()
+                     ?? "unknown";
+            return RateLimitPartition.GetFixedWindowLimiter($"auth:{ip}", _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(5),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+        });
 
         options.OnRejected = async (ctx, token) =>
         {
             ctx.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
             ctx.HttpContext.Response.ContentType = "application/json";
-            var json = JsonSerializer.Serialize(new { success = false, message = "Rate limit exceeded. Please try again later." });
+            var retryAfter = ctx.Lease.TryGetMetadata(MetadataName.RetryAfter, out var r) ? (int)r.TotalSeconds : 60;
+            ctx.HttpContext.Response.Headers["Retry-After"] = retryAfter.ToString();
+            var json = JsonSerializer.Serialize(new
+            {
+                success = false,
+                message = $"Rate limit exceeded. Please retry after {retryAfter} seconds."
+            });
             await ctx.HttpContext.Response.WriteAsync(json, token);
         };
     });
@@ -184,9 +241,14 @@ try
 
     app.UseSerilogRequestLogging();
 
-    app.UseSwagger();
-    app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "ClaudyGod API v1"));
+    // Swagger available in non-production environments only
+    if (!app.Environment.IsProduction())
+    {
+        app.UseSwagger();
+        app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "ClaudyGod API v1"));
+    }
 
+    app.UseMiddleware<SecurityHeadersMiddleware>();
     app.UseMiddleware<ExceptionMiddleware>();
 
     app.UseHttpsRedirection();
