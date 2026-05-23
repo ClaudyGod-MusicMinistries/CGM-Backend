@@ -3,6 +3,7 @@ using ClaudyGod.Domain.Entities;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace ClaudyGod.Application.Features.Subscribers.Commands;
 
@@ -12,8 +13,13 @@ public class SubscribeCommandValidator : AbstractValidator<SubscribeCommand>
 {
     public SubscribeCommandValidator()
     {
-        RuleFor(x => x.Name).NotEmpty().MaximumLength(100);
-        RuleFor(x => x.Email).NotEmpty().EmailAddress().MaximumLength(256);
+        RuleFor(x => x.Name)
+            .NotEmpty().WithMessage("Name is required.")
+            .MaximumLength(100);
+        RuleFor(x => x.Email)
+            .NotEmpty().WithMessage("Email is required.")
+            .EmailAddress().WithMessage("A valid email address is required.")
+            .MaximumLength(256);
     }
 }
 
@@ -21,11 +27,16 @@ public class SubscribeCommandHandler : IRequestHandler<SubscribeCommand, Guid>
 {
     private readonly IApplicationDbContext _db;
     private readonly IEmailService _email;
+    private readonly ILogger<SubscribeCommandHandler> _logger;
 
-    public SubscribeCommandHandler(IApplicationDbContext db, IEmailService email)
+    public SubscribeCommandHandler(
+        IApplicationDbContext db,
+        IEmailService email,
+        ILogger<SubscribeCommandHandler> logger)
     {
         _db = db;
         _email = email;
+        _logger = logger;
     }
 
     public async Task<Guid> Handle(SubscribeCommand request, CancellationToken ct)
@@ -38,7 +49,7 @@ public class SubscribeCommandHandler : IRequestHandler<SubscribeCommand, Guid>
         if (existing is not null)
         {
             if (existing.IsActive)
-                throw new Domain.Exceptions.DuplicateResourceException("Email is already subscribed.");
+                throw new Domain.Exceptions.DuplicateResourceException("This email is already subscribed.");
 
             existing.Resubscribe();
             await _db.SaveChangesAsync(ct);
@@ -55,11 +66,11 @@ public class SubscribeCommandHandler : IRequestHandler<SubscribeCommand, Guid>
     }
 
     private Task SendWelcomeEmailAsync(Subscriber subscriber, CancellationToken ct) =>
-        _email.SendFromTemplateAsync(subscriber.Email, "welcome", new Dictionary<string, string>
+        _email.TrySendFromTemplateAsync(subscriber.Email, "welcome", new Dictionary<string, string>
         {
             ["subject"] = "Welcome to the ClaudyGod Community!",
             ["name"] = subscriber.Name,
             ["unsubscribeToken"] = subscriber.UnsubscribeToken,
             ["unsubscribeEmail"] = subscriber.Email
-        }, ct);
+        }, _logger, ct);
 }

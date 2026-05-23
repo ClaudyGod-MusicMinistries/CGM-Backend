@@ -4,6 +4,7 @@ using ClaudyGod.Domain.Entities;
 using FluentValidation;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace ClaudyGod.Application.Features.Tickets.Commands;
 
@@ -13,12 +14,22 @@ public class ReserveTicketCommandValidator : AbstractValidator<ReserveTicketComm
 {
     public ReserveTicketCommandValidator()
     {
-        RuleFor(x => x.Request.EventId).NotEmpty();
-        RuleFor(x => x.Request.FirstName).NotEmpty().MaximumLength(100);
-        RuleFor(x => x.Request.LastName).NotEmpty().MaximumLength(100);
-        RuleFor(x => x.Request.Email).NotEmpty().EmailAddress();
-        RuleFor(x => x.Request.Phone).NotEmpty().MaximumLength(30);
-        RuleFor(x => x.Request.Quantity).InclusiveBetween(1, 10);
+        RuleFor(x => x.Request.EventId)
+            .NotEmpty().WithMessage("Please select an event.");
+        RuleFor(x => x.Request.FirstName)
+            .NotEmpty().WithMessage("First name is required.")
+            .MaximumLength(100);
+        RuleFor(x => x.Request.LastName)
+            .NotEmpty().WithMessage("Last name is required.")
+            .MaximumLength(100);
+        RuleFor(x => x.Request.Email)
+            .NotEmpty().WithMessage("Email is required.")
+            .EmailAddress().WithMessage("A valid email address is required.");
+        RuleFor(x => x.Request.Phone)
+            .NotEmpty().WithMessage("Phone number is required.")
+            .MaximumLength(30);
+        RuleFor(x => x.Request.Quantity)
+            .InclusiveBetween(1, 10).WithMessage("Ticket quantity must be between 1 and 10.");
     }
 }
 
@@ -26,11 +37,16 @@ public class ReserveTicketCommandHandler : IRequestHandler<ReserveTicketCommand,
 {
     private readonly IApplicationDbContext _db;
     private readonly IEmailService _email;
+    private readonly ILogger<ReserveTicketCommandHandler> _logger;
 
-    public ReserveTicketCommandHandler(IApplicationDbContext db, IEmailService email)
+    public ReserveTicketCommandHandler(
+        IApplicationDbContext db,
+        IEmailService email,
+        ILogger<ReserveTicketCommandHandler> logger)
     {
         _db = db;
         _email = email;
+        _logger = logger;
     }
 
     public async Task<string> Handle(ReserveTicketCommand request, CancellationToken ct)
@@ -41,8 +57,12 @@ public class ReserveTicketCommandHandler : IRequestHandler<ReserveTicketCommand,
             .FirstOrDefaultAsync(e => e.Id == r.EventId, ct)
             ?? throw new Domain.Exceptions.NotFoundException("Event not found.");
 
+        if (ev.Status == Domain.Enums.EventStatus.Cancelled)
+            throw new Domain.Exceptions.DomainException("This event has been cancelled.");
+
         if (!ev.HasAvailableSeats() || ev.AvailableSeats < r.Quantity)
-            throw new Domain.Exceptions.DomainException("Not enough seats available.");
+            throw new Domain.Exceptions.DomainException(
+                $"Not enough seats available. Only {ev.AvailableSeats} seat(s) remaining.");
 
         var confirmationCode = GenerateConfirmationCode();
 
@@ -53,7 +73,7 @@ public class ReserveTicketCommandHandler : IRequestHandler<ReserveTicketCommand,
         _db.TicketReservations.Add(reservation);
         await _db.SaveChangesAsync(ct);
 
-        await _email.SendFromTemplateAsync(r.Email, "ticket-confirmation", new Dictionary<string, string>
+        await _email.TrySendFromTemplateAsync(r.Email, "ticket-confirmation", new Dictionary<string, string>
         {
             ["subject"] = $"Ticket Confirmed – {ev.Title}",
             ["name"] = $"{r.FirstName} {r.LastName}",
@@ -62,7 +82,7 @@ public class ReserveTicketCommandHandler : IRequestHandler<ReserveTicketCommand,
             ["venue"] = ev.Venue ?? "TBD",
             ["quantity"] = r.Quantity.ToString(),
             ["confirmationCode"] = confirmationCode
-        }, ct);
+        }, _logger, ct);
 
         return confirmationCode;
     }
