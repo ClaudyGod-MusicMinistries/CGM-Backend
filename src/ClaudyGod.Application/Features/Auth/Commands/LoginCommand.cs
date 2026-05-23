@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace ClaudyGod.Application.Features.Auth.Commands;
 
-public record LoginCommand(string Email, string Password) : IRequest<TokenResponseDto>;
+public record LoginCommand(string Email, string Password) : IRequest<AuthResult>;
 
 public class LoginCommandValidator : AbstractValidator<LoginCommand>
 {
@@ -17,7 +17,7 @@ public class LoginCommandValidator : AbstractValidator<LoginCommand>
     }
 }
 
-public class LoginCommandHandler : IRequestHandler<LoginCommand, TokenResponseDto>
+public class LoginCommandHandler : IRequestHandler<LoginCommand, AuthResult>
 {
     private readonly IApplicationDbContext _db;
     private readonly IJwtService _jwt;
@@ -30,7 +30,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, TokenResponseDt
         _currentUser = currentUser;
     }
 
-    public async Task<TokenResponseDto> Handle(LoginCommand request, CancellationToken ct)
+    public async Task<AuthResult> Handle(LoginCommand request, CancellationToken ct)
     {
         var user = await _db.Users
             .Include(u => u.RefreshTokens)
@@ -43,16 +43,22 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, TokenResponseDt
         if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             throw new Domain.Exceptions.NotFoundException("Invalid email or password.");
 
+        // Revoke all tokens from same IP to enforce single-session-per-device
+        var staleTokens = user.RefreshTokens
+            .Where(t => t.IsActive && t.CreatedByIp == _currentUser.IpAddress)
+            .ToList();
+        foreach (var t in staleTokens)
+            t.Revoke(_currentUser.IpAddress);
+
         user.RecordLogin();
 
         var accessToken = _jwt.GenerateAccessToken(user);
         var refreshToken = _jwt.GenerateRefreshToken(_currentUser.IpAddress);
         refreshToken.UserId = user.Id;
-
         user.RefreshTokens.Add(refreshToken);
+
         await _db.SaveChangesAsync(ct);
 
-        return new TokenResponseDto(accessToken, refreshToken.Token,
-            refreshToken.ExpiresAt, user.Role.ToString());
+        return new AuthResult(accessToken, refreshToken.Token, refreshToken.ExpiresAt, user.Role.ToString());
     }
 }

@@ -1,0 +1,81 @@
+http:
+  middlewares:
+    # ── Security headers ──────────────────────────────────────────────────────
+    secureHeaders:
+      headers:
+        stsSeconds: 63072000
+        stsIncludeSubdomains: true
+        stsPreload: true
+        forceSTSHeader: true
+        frameDeny: true
+        contentTypeNosniff: true
+        browserXssFilter: false          # use CSP instead
+        referrerPolicy: "strict-origin-when-cross-origin"
+        permissionsPolicy: "camera=(), microphone=(), geolocation=(), payment=()"
+        customResponseHeaders:
+          X-Powered-By: ""
+          Server: ""
+          X-XSS-Protection: "0"
+
+    # ── Gzip compression ─────────────────────────────────────────────────────
+    compression:
+      compress:
+        excludedContentTypes:
+          - text/event-stream
+
+    # ── Auth-endpoint rate limiter (applied by label on api service) ──────────
+    authRateLimit:
+      rateLimit:
+        average: 10
+        burst: 5
+        period: 5m
+        sourceCriterion:
+          ipStrategy:
+            depth: 1
+            excludedIPs: []
+
+    # ── AI-endpoint rate limiter ──────────────────────────────────────────────
+    aiRateLimit:
+      rateLimit:
+        average: 10
+        burst: 3
+        period: 1m
+        sourceCriterion:
+          ipStrategy:
+            depth: 1
+
+    # ── Global API rate limiter ───────────────────────────────────────────────
+    globalRateLimit:
+      rateLimit:
+        average: 100
+        burst: 50
+        period: 1m
+        sourceCriterion:
+          ipStrategy:
+            depth: 1
+
+    # ── Redirect www → non-www ────────────────────────────────────────────────
+    wwwRedirect:
+      redirectRegex:
+        regex: "^https://www\\.(.*)"
+        replacement: "https://${1}"
+        permanent: true
+
+    # ── Strip /api prefix when routing to internal services ──────────────────
+    stripApiPrefix:
+      stripPrefix:
+        prefixes:
+          - "/api"
+
+tls:
+  options:
+    modern:
+      minVersion: VersionTLS12
+      cipherSuites:
+        - TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+        - TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+        - TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
+        - TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+      sniStrict: true
