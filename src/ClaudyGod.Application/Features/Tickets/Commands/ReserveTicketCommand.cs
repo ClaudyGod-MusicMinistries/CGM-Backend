@@ -60,18 +60,32 @@ public class ReserveTicketCommandHandler : IRequestHandler<ReserveTicketCommand,
         if (ev.Status == Domain.Enums.EventStatus.Cancelled)
             throw new Domain.Exceptions.DomainException("This event has been cancelled.");
 
-        if (!ev.HasAvailableSeats() || ev.AvailableSeats < r.Quantity)
+        if (ev.AvailableSeats < r.Quantity)
             throw new Domain.Exceptions.DomainException(
-                $"Not enough seats available. Only {ev.AvailableSeats} seat(s) remaining.");
+                ev.AvailableSeats <= 0
+                    ? "This event is fully booked."
+                    : $"Only {ev.AvailableSeats} seat(s) remaining — you requested {r.Quantity}.");
 
         var confirmationCode = GenerateConfirmationCode();
-
         var reservation = TicketReservation.Create(ev.Id, r.FirstName, r.LastName,
             r.Email, r.Phone, r.Quantity, confirmationCode);
 
         ev.IncrementReserved(r.Quantity);
         _db.TicketReservations.Add(reservation);
-        await _db.SaveChangesAsync(ct);
+
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (Microsoft.EntityFrameworkCore.DbUpdateException)
+        {
+            // Re-read event to get accurate seat count — another request may have taken the last seats
+            var fresh = await _db.Events.FirstOrDefaultAsync(e => e.Id == r.EventId, ct);
+            throw new Domain.Exceptions.DomainException(
+                fresh is null || fresh.AvailableSeats <= 0
+                    ? "This event just sold out — please try another event."
+                    : $"Only {fresh.AvailableSeats} seat(s) remaining. Please refresh and try again.");
+        }
 
         await _email.TrySendFromTemplateAsync(r.Email, "ticket-confirmation", new Dictionary<string, string>
         {
