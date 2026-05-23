@@ -11,6 +11,12 @@ public class ExceptionMiddleware
     private readonly RequestDelegate _next;
     private readonly ILogger<ExceptionMiddleware> _logger;
 
+    private static readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DictionaryKeyPolicy = JsonNamingPolicy.CamelCase,
+    };
+
     public ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddleware> logger)
     {
         _next = next;
@@ -33,7 +39,8 @@ public class ExceptionMiddleware
     {
         HttpStatusCode statusCode;
         string message;
-        IEnumerable<string>? errors = null;
+        IEnumerable<string> errors = [];
+        IDictionary<string, string[]> fieldErrors = new Dictionary<string, string[]>();
 
         switch (ex)
         {
@@ -41,49 +48,55 @@ public class ExceptionMiddleware
                 statusCode = HttpStatusCode.NotFound;
                 message = nfe.Message;
                 break;
+
             case DuplicateResourceException dre:
                 statusCode = HttpStatusCode.Conflict;
                 message = dre.Message;
                 break;
+
+            // FluentValidation pipeline (via ValidationBehaviour → Domain.ValidationException)
             case ValidationException ve:
-                statusCode = HttpStatusCode.BadRequest;
-                message = "Validation failed.";
+                statusCode = HttpStatusCode.UnprocessableEntity;
+                message = "Validation failed. Please correct the highlighted fields.";
+                fieldErrors = ve.Errors;
                 errors = ve.Errors.SelectMany(e => e.Value);
                 break;
+
+            // Application-layer ValidationException (from AbstractValidator directly)
             case Application.Common.Exceptions.ValidationException ave:
-                statusCode = HttpStatusCode.BadRequest;
-                message = "Validation failed.";
+                statusCode = HttpStatusCode.UnprocessableEntity;
+                message = "Validation failed. Please correct the highlighted fields.";
+                fieldErrors = ave.Errors;
                 errors = ave.Errors.SelectMany(e => e.Value);
                 break;
+
             case DomainException de:
                 statusCode = HttpStatusCode.BadRequest;
                 message = de.Message;
                 break;
+
             case UnauthorizedAccessException:
                 statusCode = HttpStatusCode.Unauthorized;
-                message = "Unauthorized.";
+                message = "You are not authorized to perform this action.";
                 break;
+
             default:
                 statusCode = HttpStatusCode.InternalServerError;
-                message = "An unexpected error occurred.";
+                message = "An unexpected error occurred. Please try again.";
                 break;
         }
 
         if (statusCode == HttpStatusCode.InternalServerError)
-            _logger.LogError(ex, "Unhandled exception");
+            _logger.LogError(ex, "Unhandled exception on {Method} {Path}",
+                context.Request.Method, context.Request.Path);
         else
-            _logger.LogWarning(ex, "Handled exception: {Message}", ex.Message);
+            _logger.LogWarning(ex, "Handled exception [{Status}]: {Message}",
+                (int)statusCode, ex.Message);
 
         context.Response.ContentType = "application/json";
         context.Response.StatusCode = (int)statusCode;
 
-        var response = ApiResponse.Fail(message, errors);
-
-        var json = JsonSerializer.Serialize(response, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        });
-
-        await context.Response.WriteAsync(json);
+        var response = ApiResponse.Fail(message, errors, fieldErrors);
+        await context.Response.WriteAsync(JsonSerializer.Serialize(response, _jsonOptions));
     }
 }
