@@ -1,8 +1,10 @@
 name: claudygod
 
 # ─────────────────────────────────────────────────────────────────────────────
-# All secrets are consumed from .env (never committed).
-# Run: cp .env.example .env && fill in values before first deploy.
+# Production compose — images pulled from GHCR.
+# Run on the server:  cp .env.example .env  →  fill values  →  ./deploy.sh
+#
+# For local dev builds, use:  docker compose -f docker-compose.yml -f docker-compose.build.yml up
 # ─────────────────────────────────────────────────────────────────────────────
 
 services:
@@ -26,26 +28,6 @@ services:
     environment:
       - ACME_EMAIL=${ACME_EMAIL}
 
-  # ── PostgreSQL database ─────────────────────────────────────────────────────
-  db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-claudygod}
-      POSTGRES_USER: ${POSTGRES_USER:-cgm}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      PGDATA: /var/lib/postgresql/data/pgdata
-    volumes:
-      - db_data:/var/lib/postgresql/data
-    networks:
-      - internal
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cgm} -d ${POSTGRES_DB:-claudygod}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
   # ── Redis cache ─────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
@@ -67,18 +49,16 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── EF Core migration runner (exits after running) ──────────────────────────
+  # ── EF Core migration runner (one-shot, exits after migrating) ───────────────
   migrate:
-    image: claudygod-api:${TAG:-latest}
-    build:
-      context: ..
-      dockerfile: Dockerfile
+    image: ${IMAGE_API:-ghcr.io/claudygod-musicministries/cgm-api}:${TAG:-latest}
+    pull_policy: always
     restart: on-failure:3
     command: ["dotnet", "ClaudyGod.API.dll", "--migrate"]
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__DefaultConnection: >-
-        Host=db;Port=5432;Database=${POSTGRES_DB:-claudygod};
+        Host=${DB_HOST:-db};Port=5432;Database=${POSTGRES_DB:-claudygod};
         Username=${POSTGRES_USER:-cgm};Password=${POSTGRES_PASSWORD};
         Ssl Mode=Prefer;Trust Server Certificate=true
     depends_on:
@@ -87,12 +67,30 @@ services:
     networks:
       - internal
 
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-claudygod}
+      POSTGRES_USER: ${POSTGRES_USER:-cgm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cgm} -d ${POSTGRES_DB:-claudygod}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
   # ── .NET API ────────────────────────────────────────────────────────────────
   api:
-    image: claudygod-api:${TAG:-latest}
-    build:
-      context: ..
-      dockerfile: Dockerfile
+    image: ${IMAGE_API:-ghcr.io/claudygod-musicministries/cgm-api}:${TAG:-latest}
+    pull_policy: always
     restart: unless-stopped
     depends_on:
       migrate:
@@ -105,12 +103,12 @@ services:
 
       # Database
       ConnectionStrings__DefaultConnection: >-
-        Host=db;Port=5432;Database=${POSTGRES_DB:-claudygod};
+        Host=${DB_HOST:-db};Port=5432;Database=${POSTGRES_DB:-claudygod};
         Username=${POSTGRES_USER:-cgm};Password=${POSTGRES_PASSWORD};
         Ssl Mode=Prefer;Trust Server Certificate=true
 
-      # Redis (with password)
-      Redis__ConnectionString: redis:default:${REDIS_PASSWORD}@redis:6379
+      # Redis
+      Redis__ConnectionString: "redis:default:${REDIS_PASSWORD}@redis:6379"
       Redis__InstanceName: "claudygod:"
 
       # JWT
@@ -120,7 +118,7 @@ services:
       Jwt__AccessTokenExpiryMinutes: "15"
       Jwt__RefreshTokenExpiryDays: "14"
 
-      # Email
+      # Email (SMTP)
       Email__SmtpHost: ${EMAIL_SMTP_HOST:-smtp.gmail.com}
       Email__SmtpPort: ${EMAIL_SMTP_PORT:-587}
       Email__SmtpUsername: ${EMAIL_SMTP_USERNAME}
@@ -135,10 +133,10 @@ services:
       FileStorage__BaseUrl: /uploads
       FileStorage__MaxFileSizeMb: "50"
 
-      # Encryption (AES-256)
+      # AES-256 encryption
       Encryption__Key: ${ENCRYPTION_KEY}
 
-      # CORS — must include the frontend domain
+      # CORS
       Cors__Origins__0: https://${DOMAIN}
       Cors__Origins__1: https://www.${DOMAIN}
 
@@ -146,7 +144,7 @@ services:
       RateLimit__PermitLimit: "100"
       RateLimit__WindowSeconds: "60"
 
-      # Anthropic (Claude AI)
+      # Anthropic (Claude AI — optional)
       Anthropic__ApiKey: ${ANTHROPIC_API_KEY}
       Anthropic__Model: "claude-sonnet-4-6"
 
@@ -178,21 +176,15 @@ services:
 
   # ── Next.js frontend ────────────────────────────────────────────────────────
   web:
-    image: claudygod-web:${TAG:-latest}
-    build:
-      context: ../../ClaudyGodWebApp          # path to Next.js repo root
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY: ${NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY}
-        NEXT_PUBLIC_SITE_URL: https://${DOMAIN}
+    image: ${IMAGE_WEB:-ghcr.io/claudygod-musicministries/cgm-web}:${TAG:-latest}
+    pull_policy: always
     restart: unless-stopped
     depends_on:
       api:
         condition: service_healthy
     environment:
       NODE_ENV: production
-      API_BASE_URL: http://api:8080
-      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY}
+      NEXT_PUBLIC_API_URL: https://${API_DOMAIN}
       NEXT_PUBLIC_SITE_URL: https://${DOMAIN}
     networks:
       - traefik-public
@@ -206,12 +198,13 @@ services:
       - "traefik.http.services.cgm-web.loadbalancer.server.port=3000"
       - "traefik.http.routers.cgm-web.middlewares=secureHeaders@file,compression@file,wwwRedirect@file"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/healthz"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 30s
 
+# ── Volumes ──────────────────────────────────────────────────────────────────
 volumes:
   traefik_acme:
   db_data:
@@ -219,9 +212,10 @@ volumes:
   api_uploads:
   api_logs:
 
+# ── Networks ─────────────────────────────────────────────────────────────────
 networks:
   traefik-public:
-    external: true       # pre-create: docker network create traefik-public
+    external: true        # pre-create: docker network create traefik-public
   internal:
     driver: bridge
-    internal: true       # no outbound internet from internal services
+    internal: true        # no outbound internet from internal services
