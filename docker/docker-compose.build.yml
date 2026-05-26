@@ -1,0 +1,30 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Local development override — builds images from source instead of pulling.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up --build
+#
+# This file is NOT used in production. Never push this to a server.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  migrate:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    pull_policy: build
+
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    pull_policy: build
+
+  web:
+    build:
+      context: ../../website2.0/ClaudyGodWebApp
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8080
+        NEXT_PUBLIC_SITE_URL: http://localhost:3000
+    pull_policy: build
