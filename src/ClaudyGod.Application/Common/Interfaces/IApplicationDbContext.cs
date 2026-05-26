@@ -24,6 +24,7 @@ public interface IApplicationDbContext
     DbSet<RefreshToken> RefreshTokens { get; }
     DbSet<AuditLog> AuditLogs { get; }
     DbSet<Reel> Reels { get; }
+    DbSet<Album> Albums { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
