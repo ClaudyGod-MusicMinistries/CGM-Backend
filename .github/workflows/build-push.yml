@@ -106,7 +106,7 @@ jobs:
           script: |
             set -e
             export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
-            DEPLOY_PATH="${{ secrets.VPS_DEPLOY_PATH }}"
+            DEPLOY_PATH="$(echo '${{ secrets.VPS_DEPLOY_PATH }}' | tr -d '[:space:]')"
             cd "$DEPLOY_PATH"
 
             # Pull latest infra scripts
