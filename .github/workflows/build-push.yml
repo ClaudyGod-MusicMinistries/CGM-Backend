@@ -96,14 +96,28 @@ jobs:
           timeout: 180s
           script: |
             set -e
-            cd ${{ secrets.VPS_DEPLOY_PATH }}
+            DEPLOY_PATH="${{ secrets.VPS_DEPLOY_PATH }}"
+            cd "$DEPLOY_PATH"
 
-            # Authenticate to GHCR so docker can pull the new image
+            # Pull latest infra scripts (ensures deploy.sh is up to date)
+            git pull origin main --ff-only || true
+
+            # Authenticate to GHCR (Docker Compose v2)
             echo "${{ secrets.GITHUB_TOKEN }}" | \
               docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-            # Deploy only the API service (web stays running)
+            # Deploy API only using docker compose (v2) directly
             export TAG="sha-${{ needs.build.outputs.short-sha }}"
-            ./scripts/deploy.sh --api-only
+            COMPOSE="docker compose --env-file $DEPLOY_PATH/.env --project-directory $DEPLOY_PATH -f $DEPLOY_PATH/docker/docker-compose.yml"
 
+            echo "→ Pulling API image (tag: $TAG)..."
+            $COMPOSE pull api migrate
+
+            echo "→ Running migrations..."
+            $COMPOSE run --rm migrate || { echo "✗ Migrations failed"; exit 1; }
+
+            echo "→ Restarting API..."
+            $COMPOSE up -d --no-deps --remove-orphans api
+
+            docker image prune -f --filter "until=24h" >/dev/null
             echo "✓ API deploy complete — $(date -u +%Y-%m-%dT%H:%M:%SZ)"
