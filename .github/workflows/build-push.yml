@@ -21,7 +21,6 @@ jobs:
       packages: write
 
     outputs:
-      image-tag: ${{ steps.meta.outputs.version }}
       short-sha: ${{ steps.sha.outputs.short }}
 
     steps:
@@ -77,25 +76,34 @@ jobs:
           echo "|-----|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Image | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Tags | \`latest\`, \`sha-${{ steps.sha.outputs.short }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Digest | \`${{ steps.build.outputs.digest }}\` |" >> $GITHUB_STEP_SUMMARY
 
-  # ─── Trigger infrastructure deploy ───────────────────────────────────────────
+  # ─── SSH deploy to production server ─────────────────────────────────────────
   deploy:
-    name: Trigger production deploy
+    name: Deploy API to production
     needs: build
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
 
     steps:
-      - name: Dispatch deploy to infrastructure repo
-        uses: peter-evans/repository-dispatch@v3
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
         with:
-          token: ${{ secrets.INFRA_DISPATCH_TOKEN }}
-          repository: ClaudyGod-MusicMinistries/ClaudyGodweb-Infrastructure
-          event-type: deploy-api
-          client-payload: |
-            {
-              "service": "api",
-              "tag": "sha-${{ needs.build.outputs.short-sha }}",
-              "triggered_by": "CGM-Backend@${{ github.sha }}"
-            }
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT || 22 }}
+          timeout: 180s
+          script: |
+            set -e
+            cd ${{ secrets.VPS_DEPLOY_PATH }}
+
+            # Authenticate to GHCR so docker can pull the new image
+            echo "${{ secrets.GITHUB_TOKEN }}" | \
+              docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Deploy only the API service (web stays running)
+            export TAG="sha-${{ needs.build.outputs.short-sha }}"
+            ./scripts/deploy.sh --api-only
+
+            echo "✓ API deploy complete — $(date -u +%Y-%m-%dT%H:%M:%SZ)"
