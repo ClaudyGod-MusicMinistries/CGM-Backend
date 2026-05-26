@@ -102,3 +102,6 @@ cd /opt/claudygod/docker
 | `latest` | Every push to `main` | Rolling deploys |
 | `sha-xxxxxxx` | Every push | Pinned/rollback deploys |
 | `pr-N` | Pull requests | Preview builds (not pushed) |
+
+# Test Deployment
+Testing git workflow — Tue May 26 12:40:56 WAT 2026
