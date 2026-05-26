@@ -109,8 +109,8 @@ jobs:
             DEPLOY_PATH="$(echo '${{ secrets.VPS_DEPLOY_PATH }}' | tr -d '[:space:]')"
             cd "$DEPLOY_PATH"
 
-            # Pull latest infra scripts
-            git pull origin main --ff-only || true
+            # Pull latest infra scripts (force local to match remote)
+            git fetch origin main && git reset --hard origin/main || true
 
             # Authenticate to GHCR
             echo "${{ secrets.GITHUB_TOKEN }}" | \
