@@ -27,20 +27,28 @@ try
     // Handle migration-only mode (used by docker-compose migrate service)
     if (args.Contains("--migrate"))
     {
-        var migrateHost = Host.CreateDefaultBuilder(args)
-            .ConfigureServices((ctx, services) =>
-            {
-                services.AddDbContext<ApplicationDbContext>(options =>
-                    options.UseNpgsql(ctx.Configuration.GetConnectionString("DefaultConnection")));
-            })
-            .Build();
+        try
+        {
+            var migrateHost = Host.CreateDefaultBuilder(args)
+                .ConfigureServices((ctx, services) =>
+                {
+                    services.AddDbContext<ApplicationDbContext>(options =>
+                        options.UseNpgsql(ctx.Configuration.GetConnectionString("DefaultConnection")));
+                })
+                .Build();
 
-        using var scope = migrateHost.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        Log.Information("Applying database migrations...");
-        await db.Database.MigrateAsync();
-        Log.Information("Migrations applied successfully.");
-        return;
+            using var scope = migrateHost.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            Log.Information("Applying database migrations...");
+            await db.Database.MigrateAsync();
+            Log.Information("✓ Migrations applied successfully.");
+            Environment.Exit(0);
+        }
+        catch (Exception ex)
+        {
+            Log.Fatal(ex, "✗ Migration failed — connection string or DB issue");
+            Environment.Exit(1);
+        }
     }
 
     var builder = WebApplication.CreateBuilder(args);
