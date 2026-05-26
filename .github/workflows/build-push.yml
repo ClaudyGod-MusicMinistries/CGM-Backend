@@ -96,6 +96,7 @@ jobs:
           timeout: 180s
           script: |
             set -e
+            export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
             DEPLOY_PATH="${{ secrets.VPS_DEPLOY_PATH }}"
             cd "$DEPLOY_PATH"
 
