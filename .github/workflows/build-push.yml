@@ -9,7 +9,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: claudygod-musicministries/cgm-api
+  IMAGE_NAME: ghcr.io/claudygod-musicministries/cgm-api
 
 jobs:
   # ─── Build + Push ────────────────────────────────────────────────────────────
@@ -37,38 +37,43 @@ jobs:
           docker buildx inspect --bootstrap
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,prefix=sha-,format=short
-            type=ref,event=pr,prefix=pr-
-          labels: |
-            org.opencontainers.image.title=ClaudyGod API
-            org.opencontainers.image.description=ClaudyGod Music Ministry – .NET 8 REST API
-            org.opencontainers.image.vendor=ClaudyGod-MusicMinistries
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | \
+            docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Build and push
-        id: build
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile
-          platforms: linux/amd64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+        run: |
+          SHORT_SHA="${{ steps.sha.outputs.short }}"
+          IS_MAIN="${{ github.ref == 'refs/heads/main' }}"
+          IS_PR="${{ github.event_name == 'pull_request' }}"
+          PR_NUM="${{ github.event.number }}"
+
+          # Build tag list
+          TAGS="--tag ${{ env.IMAGE_NAME }}:sha-${SHORT_SHA}"
+          if [ "$IS_MAIN" = "true" ]; then
+            TAGS="$TAGS --tag ${{ env.IMAGE_NAME }}:latest"
+          fi
+          if [ "$IS_PR" = "true" ]; then
+            TAGS="$TAGS --tag ${{ env.IMAGE_NAME }}:pr-${PR_NUM}"
+          fi
+
+          # Only push on non-PR builds
+          PUSH_FLAG="--push"
+          if [ "$IS_PR" = "true" ]; then
+            PUSH_FLAG="--load"
+          fi
+
+          docker buildx build \
+            --platform linux/amd64 \
+            --file Dockerfile \
+            --cache-from type=gha \
+            --cache-to   type=gha,mode=max \
+            --label "org.opencontainers.image.title=ClaudyGod API" \
+            --label "org.opencontainers.image.description=ClaudyGod Music Ministry – .NET 8 REST API" \
+            --label "org.opencontainers.image.vendor=ClaudyGod-MusicMinistries" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            $TAGS $PUSH_FLAG \
+            .
 
       - name: Summary
         if: github.event_name != 'pull_request'
@@ -76,7 +81,7 @@ jobs:
           echo "### ✅ API image pushed to GHCR" >> $GITHUB_STEP_SUMMARY
           echo "| Key | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|-----|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Image | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Image | \`${{ env.IMAGE_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Tags | \`latest\`, \`sha-${{ steps.sha.outputs.short }}\` |" >> $GITHUB_STEP_SUMMARY
 
   # ─── SSH deploy to production server ─────────────────────────────────────────
@@ -102,14 +107,14 @@ jobs:
             DEPLOY_PATH="${{ secrets.VPS_DEPLOY_PATH }}"
             cd "$DEPLOY_PATH"
 
-            # Pull latest infra scripts (ensures deploy.sh is up to date)
+            # Pull latest infra scripts
             git pull origin main --ff-only || true
 
-            # Authenticate to GHCR (Docker Compose v2)
+            # Authenticate to GHCR
             echo "${{ secrets.GITHUB_TOKEN }}" | \
               docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-            # Deploy API only using docker compose (v2) directly
+            # Deploy API only
             export TAG="sha-${{ needs.build.outputs.short-sha }}"
             COMPOSE="docker compose --env-file $DEPLOY_PATH/.env --project-directory $DEPLOY_PATH -f $DEPLOY_PATH/docker/docker-compose.yml"
 
