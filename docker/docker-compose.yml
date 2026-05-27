@@ -184,6 +184,12 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
+      # Server-side: Next.js API proxy routes call the .NET API on the internal network
+      API_BASE_URL: http://api:8080
+      # Server-side: Paystack secret for /api/payments/* routes
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
+      # NEXT_PUBLIC_* vars below are documented here but only take effect when
+      # baked into the image at build time (GitHub Actions build-args from secrets).
       NEXT_PUBLIC_API_URL: https://${API_DOMAIN}
       NEXT_PUBLIC_SITE_URL: https://${DOMAIN}
     networks:
@@ -198,7 +204,7 @@ services:
       - "traefik.http.services.cgm-web.loadbalancer.server.port=3000"
       - "traefik.http.routers.cgm-web.middlewares=secureHeaders@file,compression@file,wwwRedirect@file"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/healthz"]
       interval: 30s
       timeout: 10s
       retries: 3
