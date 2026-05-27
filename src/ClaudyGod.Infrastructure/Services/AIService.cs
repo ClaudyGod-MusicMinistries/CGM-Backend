@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ClaudyGod.Application.Common.Interfaces;
+using ClaudyGod.Domain.Exceptions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -10,7 +11,7 @@ namespace ClaudyGod.Infrastructure.Services;
 public class AIAIService : IAIService
 {
     private readonly HttpClient _http;
-    private readonly string _apiKey;
+    private readonly string? _apiKey;   // null/empty = not configured, returns 503
     private readonly string _model;
     private readonly ILogger<AIAIService> _logger;
 
@@ -69,10 +70,15 @@ public class AIAIService : IAIService
 
     public AIAIService(HttpClient http, IConfiguration config, ILogger<AIAIService> logger)
     {
-        _http    = http;
-        _apiKey  = config["AIProvider:ApiKey"] ?? throw new InvalidOperationException("AIProvider:ApiKey is required.");
-        _model   = config["AIProvider:Model"] ?? "ai-sonnet-4-6";
-        _logger  = logger;
+        _http   = http;
+        _model  = config["AIProviderSettings:Model"] ?? config["AIProvider:Model"] ?? "ai-sonnet-4-6";
+        _logger = logger;
+
+        var key = config["AIProviderSettings:ApiKey"] ?? config["AIProvider:ApiKey"];
+        _apiKey = string.IsNullOrWhiteSpace(key) ? null : key;
+
+        if (_apiKey is null)
+            _logger.LogWarning("AIProviderSettings:ApiKey is not configured. AI endpoints will return 503 until the key is set.");
     }
 
     public async Task<string> ChatAsync(
@@ -81,6 +87,11 @@ public class AIAIService : IAIService
         AIPersona persona = AIPersona.MinistryAssistant,
         CancellationToken ct = default)
     {
+        // Gracefully unavailable — API key not yet configured
+        if (_apiKey is null)
+            throw new ServiceUnavailableException("AI",
+                "The AI assistant is not available at this time. Please try again later or contact us directly.");
+
         var messages = new List<object>();
 
         if (history is not null)
@@ -115,14 +126,14 @@ public class AIAIService : IAIService
         catch (Exception ex)
         {
             _logger.LogError(ex, "AIProvider API call failed");
-            throw new InvalidOperationException("AI service is temporarily unavailable.");
+            throw new ServiceUnavailableException("AI", "The AI assistant is temporarily unavailable. Please try again.");
         }
 
         if (!res.IsSuccessStatusCode)
         {
             var err = await res.Content.ReadAsStringAsync(ct);
             _logger.LogError("AIProvider API error {Status}: {Body}", (int)res.StatusCode, err);
-            throw new InvalidOperationException("AI service returned an error. Please try again.");
+            throw new ServiceUnavailableException("AI", "The AI assistant encountered an error. Please try again later.");
         }
 
         var body = await res.Content.ReadFromJsonAsync<AIProviderResponse>(cancellationToken: ct);
