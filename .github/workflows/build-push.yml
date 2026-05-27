@@ -77,6 +77,24 @@ jobs:
             $TAGS $PUSH_FLAG \
             .
 
+      # ── Run migrations from the CI runner (has direct internet to Supabase) ──
+      # The VPS Docker daemon has DNS issues that cause VPS-side migrations to
+      # time out. Running here on the ubuntu-latest runner guarantees connectivity.
+      - name: Run database migrations
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          echo "→ Pulling image for migration run..."
+          docker pull ${{ env.IMAGE_NAME }}:sha-${{ steps.sha.outputs.short }}
+
+          echo "→ Applying EF Core migrations against Supabase..."
+          docker run --rm \
+            -e ASPNETCORE_ENVIRONMENT=Production \
+            -e "ConnectionStrings__DefaultConnection=${{ secrets.MIGRATE_CONNECTION_STRING }}" \
+            ${{ env.IMAGE_NAME }}:sha-${{ steps.sha.outputs.short }} \
+            --migrate
+
+          echo "✓ Migrations applied"
+
       - name: Summary
         if: github.event_name != 'pull_request'
         run: |
@@ -85,6 +103,7 @@ jobs:
           echo "|-----|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| Image | \`${{ env.IMAGE_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Tags | \`latest\`, \`sha-${{ steps.sha.outputs.short }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Migrations | ✅ Applied from CI runner |" >> $GITHUB_STEP_SUMMARY
 
   # ─── SSH deploy to production server ─────────────────────────────────────────
   deploy:
@@ -116,15 +135,12 @@ jobs:
             echo "${{ secrets.GITHUB_TOKEN }}" | \
               docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
-            # Deploy API only
+            # Migrations already ran in CI — just pull and restart the API
             export TAG="sha-${{ needs.build.outputs.short-sha }}"
             COMPOSE="docker compose --env-file $DEPLOY_PATH/.env --project-directory $DEPLOY_PATH -f $DEPLOY_PATH/docker/docker-compose.yml"
 
             echo "→ Pulling API image (tag: $TAG)..."
-            $COMPOSE pull api migrate
-
-            echo "→ Running migrations..."
-            $COMPOSE run --rm migrate || { echo "✗ Migrations failed"; exit 1; }
+            $COMPOSE pull api
 
             echo "→ Restarting API..."
             $COMPOSE up -d --no-deps --remove-orphans api
