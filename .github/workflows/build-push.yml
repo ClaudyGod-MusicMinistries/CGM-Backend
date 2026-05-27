@@ -82,14 +82,30 @@ jobs:
       # time out. Running here on the ubuntu-latest runner guarantees connectivity.
       - name: Run database migrations
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        env:
+          # Bind the secret to a step-level env var so the shell handles it as
+          # a variable (not inline text), which is safe for values with semicolons.
+          MIGRATE_CONN: ${{ secrets.MIGRATE_CONNECTION_STRING }}
         run: |
+          if [ -z "$MIGRATE_CONN" ]; then
+            echo "❌ MIGRATE_CONNECTION_STRING secret is not set."
+            echo ""
+            echo "Add it in GitHub → CGM-Backend → Settings → Secrets and variables → Actions → New repository secret"
+            echo ""
+            echo "  Name:  MIGRATE_CONNECTION_STRING"
+            echo "  Value: Host=aws-1-eu-central-1.pooler.supabase.com;Port=5432;Database=postgres;Username=postgres.ktzhbaqumdvypegnsgok;Password=ClaudyGod@2026;Ssl Mode=Require;Trust Server Certificate=true;Pooling=false;Timeout=60;Application Name=cgm_migrate"
+            echo ""
+            echo "Then re-run this workflow."
+            exit 1
+          fi
+
           echo "→ Pulling image for migration run..."
           docker pull ${{ env.IMAGE_NAME }}:sha-${{ steps.sha.outputs.short }}
 
           echo "→ Applying EF Core migrations against Supabase..."
           docker run --rm \
             -e ASPNETCORE_ENVIRONMENT=Production \
-            -e "ConnectionStrings__DefaultConnection=${{ secrets.MIGRATE_CONNECTION_STRING }}" \
+            -e "ConnectionStrings__DefaultConnection=${MIGRATE_CONN}" \
             ${{ env.IMAGE_NAME }}:sha-${{ steps.sha.outputs.short }} \
             --migrate
 
