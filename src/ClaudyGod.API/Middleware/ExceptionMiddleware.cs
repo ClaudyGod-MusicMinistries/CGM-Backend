@@ -70,6 +70,11 @@ public class ExceptionMiddleware
                 errors = ave.Errors.SelectMany(e => e.Value);
                 break;
 
+            case ServiceUnavailableException sue:
+                statusCode = HttpStatusCode.ServiceUnavailable;
+                message = sue.Message;
+                break;
+
             case DomainException de:
                 statusCode = HttpStatusCode.BadRequest;
                 message = de.Message;
