@@ -89,7 +89,7 @@ public class ExceptionMiddleware
             (StatusCodes.Status422UnprocessableEntity,
              "Validation Failed",
              "One or more validation errors occurred. See 'errors' for details.",
-             ve.Errors),
+             (IDictionary<string, string[]>)new Dictionary<string, string[]>(ve.Errors)),
 
         Application.Common.Exceptions.ValidationException ave =>
             (StatusCodes.Status422UnprocessableEntity,
