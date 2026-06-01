@@ -1,0 +1,51 @@
+################################################################################
+#                     LOCAL DEVELOPMENT — docker compose                        #
+#  Spins up PostgreSQL + Redis locally so you can run the API with              #
+#  dotnet run or the VS/Rider debugger without any cloud dependencies.           #
+#                                                                                #
+#  Usage:                                                                        #
+#    docker compose -f docker-compose.dev.yml up -d       # start deps          #
+#    dotnet run --project src/ClaudyGod.API               # run the API         #
+#    docker compose -f docker-compose.dev.yml down -v     # stop + wipe data    #
+################################################################################
+
+name: claudygod-dev
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: cgm_postgres_dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       claudygod_dev
+      POSTGRES_USER:     cgm
+      POSTGRES_PASSWORD: dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cgm -d claudygod_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: cgm_redis_dev
+    restart: unless-stopped
+    command: redis-server --requirepass dev_redis_password
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "dev_redis_password", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres_dev_data:
+  redis_dev_data:
