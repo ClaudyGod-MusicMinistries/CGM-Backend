@@ -13,6 +13,8 @@ env:
 
 jobs:
   # ─── Test ─────────────────────────────────────────────────────────────────────
+  # ubuntu-latest ships with .NET 8 — no actions/setup-dotnet needed
+  # (actions/setup-dotnet@* is not in the org's allowed-actions list)
   test:
     name: Run unit tests
     runs-on: ubuntu-latest
@@ -21,10 +23,8 @@ jobs:
         with:
           token: ${{ secrets.GH_PAT }}
 
-      - name: Setup .NET 8
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
+      - name: Verify .NET version
+        run: dotnet --version
 
       - name: Restore
         run: dotnet restore ClaudyGod.sln
