@@ -164,12 +164,14 @@ try
         options.InstanceName = redisInstance;
     });
 
-    // Health checks
+    // Health checks — both DB and Redis are Degraded (not Unhealthy) so that
+    // /healthz always returns HTTP 200. Traefik uses this endpoint to decide
+    // whether to route traffic; Unhealthy → 503 → Traefik returns 502 to users.
     builder.Services.AddHealthChecks()
         .AddNpgSql(
             builder.Configuration.GetConnectionString("DefaultConnection")!,
             name: "database",
-            failureStatus: HealthStatus.Unhealthy,
+            failureStatus: HealthStatus.Degraded,
             tags: ["db"])
         .AddRedis(
             redisConn,
