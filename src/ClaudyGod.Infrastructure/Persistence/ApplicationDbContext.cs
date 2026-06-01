@@ -1,12 +1,19 @@
 using ClaudyGod.Application.Common.Interfaces;
 using ClaudyGod.Domain.Entities;
+using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace ClaudyGod.Infrastructure.Persistence;
 
 public class ApplicationDbContext : DbContext, IApplicationDbContext
 {
-    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options) { }
+    private readonly IMediator? _mediator;
+
+    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options, IMediator? mediator = null)
+        : base(options)
+    {
+        _mediator = mediator;
+    }
 
     public DbSet<Subscriber> Subscribers => Set<Subscriber>();
     public DbSet<ContactMessage> ContactMessages => Set<ContactMessage>();
@@ -63,6 +70,23 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
             }
         }
 
-        return await base.SaveChangesAsync(cancellationToken);
+        var result = await base.SaveChangesAsync(cancellationToken);
+
+        // Dispatch domain events after the transaction commits so handlers see
+        // the persisted state. Fire-and-forget failures are logged, not thrown.
+        if (_mediator is not null)
+        {
+            var events = ChangeTracker.Entries<Domain.Entities.BaseEntity>()
+                .SelectMany(e => e.Entity.DomainEvents)
+                .ToList();
+
+            foreach (var entity in ChangeTracker.Entries<Domain.Entities.BaseEntity>())
+                entity.Entity.ClearDomainEvents();
+
+            foreach (var domainEvent in events)
+                await _mediator.Publish(domainEvent, cancellationToken);
+        }
+
+        return result;
     }
 }

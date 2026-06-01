@@ -247,9 +247,22 @@ try
 
     builder.Services.AddHttpContextAccessor();
 
+    // ProblemDetails (RFC 7807) — enables consistent machine-readable error responses
+    builder.Services.AddProblemDetails();
+
     var app = builder.Build();
 
-    app.UseSerilogRequestLogging();
+    // Correlation ID must be first so every subsequent middleware and log has the ID
+    app.UseMiddleware<CorrelationIdMiddleware>();
+
+    app.UseSerilogRequestLogging(opts =>
+    {
+        opts.EnrichDiagnosticContext = (diag, ctx) =>
+        {
+            if (ctx.Items.TryGetValue(CorrelationIdMiddleware.HeaderName, out var cid))
+                diag.Set("CorrelationId", cid);
+        };
+    });
 
     // Swagger available in non-production environments only
     if (!app.Environment.IsProduction())
