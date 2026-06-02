@@ -161,6 +161,10 @@ services:
       - "traefik.http.routers.cgm-api.tls.certresolver=letsencrypt"
       - "traefik.http.routers.cgm-api.tls.options=modern@file"
       - "traefik.http.services.cgm-api.loadbalancer.server.port=8080"
+      # Health check: tell Traefik to check /healthz instead of /
+      - "traefik.http.services.cgm-api.loadbalancer.healthcheck.path=/healthz"
+      - "traefik.http.services.cgm-api.loadbalancer.healthcheck.interval=30s"
+      - "traefik.http.services.cgm-api.loadbalancer.healthcheck.timeout=10s"
       - "traefik.http.routers.cgm-api.middlewares=secureHeaders@file,compression@file,globalRateLimit@file"
       # Health-check route (no rate limit)
       - "traefik.http.routers.cgm-healthz.rule=Host(`${API_DOMAIN}`) && Path(`/healthz`)"
