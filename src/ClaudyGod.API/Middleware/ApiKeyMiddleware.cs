@@ -16,7 +16,11 @@ public class ApiKeyMiddleware
         "/health",
         "/healthz",
         "/api/v1.0/auth",
-        "/api/v1.0/ai",  // Public chatbot and prayer features
+        "/api/v1.0/ai",        // Public chatbot and prayer features
+        "/api/v1.0/tickets",   // Public ticket endpoint
+        "/api/v1.0/bookings",  // Public booking endpoint
+        "/api/v1.0/contacts",  // Public contact form
+        "/api/v1.0/volunteers", // Public volunteer registration
     };
 
     public ApiKeyMiddleware(RequestDelegate next, ILogger<ApiKeyMiddleware> logger, IConfiguration config)
