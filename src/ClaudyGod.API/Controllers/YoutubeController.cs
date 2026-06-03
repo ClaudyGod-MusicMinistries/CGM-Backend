@@ -44,7 +44,7 @@ public class YoutubeController : ControllerBase
             if (!IsValidYoutubeVideoId(videoId))
             {
                 _logger.LogWarning("Invalid YouTube video ID format requested: {VideoId}", videoId);
-                return BadRequest(ApiResponse<YoutubeEmbedResponse>.Error("Invalid video ID format (must be 11 alphanumeric characters)"));
+                return BadRequest(ApiResponse<YoutubeEmbedResponse>.Fail("Invalid video ID format (must be 11 alphanumeric characters)"));
             }
 
             // Build secure embed URL
@@ -67,7 +67,7 @@ public class YoutubeController : ControllerBase
         {
             _logger.LogError(ex, "Error generating YouTube embed URL for video: {VideoId}", videoId);
             return StatusCode(StatusCodes.Status500InternalServerError,
-                ApiResponse<YoutubeEmbedResponse>.Error("Failed to generate video URL"));
+                ApiResponse<YoutubeEmbedResponse>.Fail("Failed to generate video URL"));
         }
     }
 
@@ -88,7 +88,7 @@ public class YoutubeController : ControllerBase
             if (!IsValidYoutubeVideoId(videoId))
             {
                 _logger.LogWarning("Invalid YouTube video ID format in POST: {VideoId}", videoId);
-                return BadRequest(ApiResponse<YoutubeEmbedResponse>.Error("Invalid video ID format"));
+                return BadRequest(ApiResponse<YoutubeEmbedResponse>.Fail("Invalid video ID format"));
             }
 
             var embedUrl = BuildEmbedUrl(
@@ -114,7 +114,7 @@ public class YoutubeController : ControllerBase
         {
             _logger.LogError(ex, "Error in POST generate embed URL for video: {VideoId}", videoId);
             return StatusCode(StatusCodes.Status500InternalServerError,
-                ApiResponse<YoutubeEmbedResponse>.Error("Failed to generate video URL"));
+                ApiResponse<YoutubeEmbedResponse>.Fail("Failed to generate video URL"));
         }
     }
 
