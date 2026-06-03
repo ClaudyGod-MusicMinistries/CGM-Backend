@@ -206,6 +206,8 @@ services:
       - "traefik.http.routers.cgm-web.tls.certresolver=letsencrypt"
       - "traefik.http.routers.cgm-web.tls.options=modern@file"
       - "traefik.http.services.cgm-web.loadbalancer.server.port=3000"
+      - "traefik.http.services.cgm-web.loadbalancer.healthcheck.path=/api/healthz"
+      - "traefik.http.services.cgm-web.loadbalancer.healthcheck.interval=30s"
       - "traefik.http.routers.cgm-web.middlewares=secureHeaders@file,compression@file,wwwRedirect@file"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/healthz"]
