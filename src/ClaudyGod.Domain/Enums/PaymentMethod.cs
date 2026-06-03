@@ -4,5 +4,8 @@ public enum PaymentMethod
 {
     Zelle,
     PayPal,
-    NigerianBankTransfer
+    NigerianBankTransfer,
+    Paystack,
+    Card,
+    BankTransfer
 }
