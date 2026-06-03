@@ -16,6 +16,7 @@ public class ApiKeyMiddleware
         "/health",
         "/healthz",
         "/api/v1.0/auth",
+        "/api/v1.0/ai",  // Public chatbot and prayer features
     };
 
     public ApiKeyMiddleware(RequestDelegate next, ILogger<ApiKeyMiddleware> logger, IConfiguration config)
