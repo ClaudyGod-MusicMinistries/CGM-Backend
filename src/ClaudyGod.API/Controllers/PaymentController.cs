@@ -36,6 +36,16 @@ public class PaymentController : ControllerBase
 
         return Ok(ApiResponse<object>.Ok(new { id }, "Bank transfer recorded and pending validation."));
     }
+
+    [HttpPost("paystack/record")]
+    public async Task<ActionResult<ApiResponse<object>>> RecordPaystackPayment(
+        [FromBody] RecordPaystackPaymentRequest dto, CancellationToken ct)
+    {
+        var id = await _mediator.Send(new RecordPaystackPaymentCommand(
+            dto.DonorName, dto.DonorEmail, dto.Amount, dto.Currency, dto.Reference, dto.Message), ct);
+
+        return Ok(ApiResponse<object>.Ok(new { id }, "Paystack payment recorded successfully."));
+    }
 }
 
 public record ValidateZelleRequest(
@@ -52,3 +62,11 @@ public record ValidateNgnTransferRequest(
     decimal Amount,
     string Currency,
     IFormFile SlipFile);
+
+public record RecordPaystackPaymentRequest(
+    string DonorName,
+    string DonorEmail,
+    decimal Amount,
+    string Currency,
+    string Reference,
+    string? Message);

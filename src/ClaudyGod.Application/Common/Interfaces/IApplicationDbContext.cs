@@ -25,6 +25,8 @@ public interface IApplicationDbContext
     DbSet<AuditLog> AuditLogs { get; }
     DbSet<Reel> Reels { get; }
     DbSet<Album> Albums { get; }
+    DbSet<Order> Orders { get; }
+    DbSet<PaystackPayment> PaystackPayments { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
