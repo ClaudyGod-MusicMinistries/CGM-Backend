@@ -35,6 +35,8 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<Reel> Reels => Set<Reel>();
     public DbSet<Album> Albums => Set<Album>();
+    public DbSet<Order> Orders => Set<Order>();
+    public DbSet<PaystackPayment> PaystackPayments => Set<PaystackPayment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -53,6 +55,8 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
         modelBuilder.Entity<TicketReservation>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<User>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Reel>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Order>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<PaystackPayment>().HasQueryFilter(e => !e.IsDeleted);
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
