@@ -21,6 +21,7 @@ public class ApiKeyMiddleware
         "/api/v1.0/bookings",  // Public booking endpoint
         "/api/v1.0/contacts",  // Public contact form
         "/api/v1.0/volunteers", // Public volunteer registration
+        "/api/v1.0/faqs",       // Public FAQ endpoint
     };
 
     public ApiKeyMiddleware(RequestDelegate next, ILogger<ApiKeyMiddleware> logger, IConfiguration config)
