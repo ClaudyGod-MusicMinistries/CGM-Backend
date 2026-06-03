@@ -124,7 +124,7 @@ try
     {
         options.AddPolicy("AllowFrontend", policy =>
             policy.WithOrigins(allowedOrigins)
-                  .WithHeaders("Content-Type", "Authorization", "Accept", "X-Requested-With", "X-CSRF-Token")
+                  .WithHeaders("Content-Type", "Authorization", "Accept", "X-Requested-With", "X-CSRF-Token", "X-API-Key")
                   .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                   .AllowCredentials()
                   .SetPreflightMaxAge(TimeSpan.FromMinutes(10)));
@@ -272,6 +272,7 @@ try
     }
 
     app.UseMiddleware<SecurityHeadersMiddleware>();
+    app.UseMiddleware<ApiKeyMiddleware>();
     app.UseMiddleware<ExceptionMiddleware>();
 
     app.UseHttpsRedirection();
