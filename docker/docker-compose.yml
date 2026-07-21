@@ -136,6 +136,9 @@ services:
       # AES-256 encryption
       Encryption__Key: ${ENCRYPTION_KEY}
 
+      # Paystack (server-side verification — payment features return 503 until this is set)
+      Paystack__SecretKey: ${PAYSTACK_SECRET_KEY:-}
+
       # CORS
       Cors__Origins__0: https://${DOMAIN}
       Cors__Origins__1: https://www.${DOMAIN}

@@ -1,6 +1,7 @@
 using Asp.Versioning;
 using ClaudyGod.Application.Common.Models;
 using ClaudyGod.Application.Features.Payments.Commands;
+using ClaudyGod.Application.Features.Payments.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -14,6 +15,17 @@ public class PaymentController : ControllerBase
     private readonly IMediator _mediator;
 
     public PaymentController(IMediator mediator) => _mediator = mediator;
+
+    /// <summary>
+    /// Which payment methods are currently active. Lets the frontend hide/disable a
+    /// method proactively instead of letting a user submit into a dead end.
+    /// </summary>
+    [HttpGet("status")]
+    public async Task<ActionResult<ApiResponse<PaymentMethodsStatusDto>>> GetStatus(CancellationToken ct)
+    {
+        var status = await _mediator.Send(new GetPaymentMethodsStatusQuery(), ct);
+        return Ok(ApiResponse<PaymentMethodsStatusDto>.Ok(status));
+    }
 
     [HttpPost("zelle/validate")]
     public async Task<ActionResult<ApiResponse<object>>> ValidateZelle(

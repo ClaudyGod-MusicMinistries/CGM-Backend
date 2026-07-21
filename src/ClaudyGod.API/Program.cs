@@ -271,6 +271,17 @@ try
         app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "ClaudyGod API v1"));
     }
 
+    // Routing must be established before CORS/ApiKeyMiddleware so that:
+    //  (a) UseCors can short-circuit preflight OPTIONS requests with proper headers, and
+    //  (b) ApiKeyMiddleware can read endpoint metadata (e.g. [PublicEndpoint]).
+    app.UseRouting();
+
+    // CORS must run before ApiKeyMiddleware. Previously it ran after, so a CORS preflight
+    // (OPTIONS) request — which never carries the custom x-api-key header — was rejected
+    // with a bare 401 by ApiKeyMiddleware before Access-Control-Allow-Origin was ever
+    // attached, which the browser reports as a CORS failure instead of the real 401.
+    app.UseCors("AllowFrontend");
+
     app.UseMiddleware<SecurityHeadersMiddleware>();
     app.UseMiddleware<ApiKeyMiddleware>();
     app.UseMiddleware<ExceptionMiddleware>();
@@ -278,7 +289,6 @@ try
     app.UseHttpsRedirection();
     app.UseStaticFiles();
 
-    app.UseCors("AllowFrontend");
     app.UseRateLimiter();
 
     app.UseAuthentication();

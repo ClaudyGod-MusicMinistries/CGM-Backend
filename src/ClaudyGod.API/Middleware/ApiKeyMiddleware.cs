@@ -1,8 +1,10 @@
+using ClaudyGod.API.Attributes;
+
 namespace ClaudyGod.API.Middleware;
 
 /// <summary>
-/// Validates API keys for public endpoints
-/// Requires x-api-key header with valid API key
+/// Validates API keys for endpoints not marked with [PublicEndpoint].
+/// Requires x-api-key header with valid API key.
 /// </summary>
 public class ApiKeyMiddleware
 {
@@ -10,19 +12,9 @@ public class ApiKeyMiddleware
     private readonly ILogger<ApiKeyMiddleware> _logger;
     private readonly IConfiguration _config;
 
-    // Endpoints that don't require API key authentication
-    private static readonly string[] PublicEndpoints = new[]
-    {
-        "/health",
-        "/healthz",
-        "/api/v1.0/auth",
-        "/api/v1.0/ai",        // Public chatbot and prayer features
-        "/api/v1.0/tickets",   // Public ticket endpoint
-        "/api/v1.0/bookings",  // Public booking endpoint
-        "/api/v1.0/contacts",  // Public contact form
-        "/api/v1.0/volunteers", // Public volunteer registration
-        "/api/v1.0/faqs",       // Public FAQ endpoint
-    };
+    // Framework-level infrastructure endpoints (not controller actions, so they can't
+    // carry a [PublicEndpoint] attribute) that must remain reachable without an API key.
+    private static readonly string[] InfrastructurePublicPaths = { "/health", "/healthz" };
 
     public ApiKeyMiddleware(RequestDelegate next, ILogger<ApiKeyMiddleware> logger, IConfiguration config)
     {
@@ -33,10 +25,20 @@ public class ApiKeyMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
+        // CORS preflight requests never carry custom headers like x-api-key — let them
+        // through so UseCors (which now runs before this middleware) can respond correctly.
+        if (HttpMethods.IsOptions(context.Request.Method))
+        {
+            await _next(context);
+            return;
+        }
+
         // Check if this endpoint requires API key
         var path = context.Request.Path.Value ?? string.Empty;
 
-        var isPublicEndpoint = PublicEndpoints.Any(ep => path.StartsWith(ep, StringComparison.OrdinalIgnoreCase));
+        var isPublicEndpoint =
+            InfrastructurePublicPaths.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase)) ||
+            context.GetEndpoint()?.Metadata.GetMetadata<PublicEndpointAttribute>() is not null;
 
         if (!isPublicEndpoint)
         {
