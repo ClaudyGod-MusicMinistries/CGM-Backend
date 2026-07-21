@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using ClaudyGod.API.Attributes;
 using ClaudyGod.Application.Common.Models;
 using ClaudyGod.Application.Features.Bookings.Commands;
 using ClaudyGod.Application.Features.Bookings.DTOs;
@@ -13,6 +14,7 @@ namespace ClaudyGod.API.Controllers;
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/bookings")]
+[PublicEndpoint]
 public class BookingController : ControllerBase
 {
     private readonly IMediator _mediator;

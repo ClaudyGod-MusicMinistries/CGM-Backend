@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using ClaudyGod.API.Attributes;
 using ClaudyGod.Application.Common.Models;
 using ClaudyGod.Application.Features.Auth.Commands;
 using ClaudyGod.Application.Features.Auth.DTOs;
@@ -13,6 +14,7 @@ namespace ClaudyGod.API.Controllers;
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/auth")]
 [EnableRateLimiting("auth")]
+[PublicEndpoint]
 public class AuthController : ControllerBase
 {
     private const string RefreshTokenCookie = "cgm_rt";

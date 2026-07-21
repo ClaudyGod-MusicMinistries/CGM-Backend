@@ -220,6 +220,10 @@ services:
       start_period: 30s
 
 # ── Volumes ──────────────────────────────────────────────────────────────────
+# api_uploads is a single shared directory regardless of `api` replica count — safe for
+# horizontal scaling (docker compose up --scale api=N) as long as all replicas run on this
+# same host. Moving to multi-host scaling would need object storage (S3/MinIO) instead via
+# a new IFileStorageService implementation — not needed for single-host scale-out.
 volumes:
   traefik_acme:
   db_data:

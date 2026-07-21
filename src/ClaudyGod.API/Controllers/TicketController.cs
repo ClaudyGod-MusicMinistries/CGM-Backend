@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using ClaudyGod.API.Attributes;
 using ClaudyGod.Application.Common.Models;
 using ClaudyGod.Application.Features.Tickets.Commands;
 using ClaudyGod.Application.Features.Tickets.DTOs;
@@ -13,6 +14,7 @@ namespace ClaudyGod.API.Controllers;
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/tickets")]
+[PublicEndpoint]
 public class TicketController : ControllerBase
 {
     private readonly IMediator _mediator;

@@ -36,6 +36,10 @@ if [[ "${1:-}" == "--api-only" ]]; then MODE="api"; TAG="latest"; fi
 
 export TAG
 
+# Number of api container replicas Traefik load-balances across (single-host scaling).
+# Override with: API_REPLICAS=1 ./deploy.sh
+API_REPLICAS="${API_REPLICAS:-2}"
+
 # ── Ensure .env exists ───────────────────────────────────────────────────────
 [[ -f .env ]] || die ".env not found. Run: cp .env.example .env && fill in values."
 
@@ -84,17 +88,17 @@ fi
 # ── Start/restart application services ───────────────────────────────────────
 case "$MODE" in
   all)
-    info "Starting API..."
-    docker compose up -d --no-deps --remove-orphans api
+    info "Starting API (${API_REPLICAS} replica(s))..."
+    docker compose up -d --no-deps --remove-orphans --scale api="$API_REPLICAS" api
     info "Waiting for API to be healthy..."
-    docker compose up --no-deps --wait api
+    docker compose up --no-deps --wait --scale api="$API_REPLICAS" api
 
     info "Starting web..."
     docker compose up -d --no-deps --remove-orphans web
     ;;
   api)
-    info "Restarting API..."
-    docker compose up -d --no-deps --remove-orphans api
+    info "Restarting API (${API_REPLICAS} replica(s))..."
+    docker compose up -d --no-deps --remove-orphans --scale api="$API_REPLICAS" api
     ;;
   web)
     info "Restarting web..."
