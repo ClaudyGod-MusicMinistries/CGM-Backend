@@ -30,7 +30,7 @@ Go to **Settings → Secrets and variables → Actions → Variables** tab:
 
 | Variable | Value |
 |----------|-------|
-| `NEXT_PUBLIC_API_URL` | `https://api.claudygod.org` |
+| `NEXT_PUBLIC_API_URL` | `https://webApi.claudygod.org` |
 | `NEXT_PUBLIC_SITE_URL` | `https://claudygod.org` |
 
 > Variables (not secrets) are fine for public Next.js env vars — they are baked into the image at build time.

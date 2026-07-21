@@ -37,6 +37,12 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(30);
         });
 
+        // Paystack verification — typed HttpClient with 20-second timeout
+        services.AddHttpClient<IPaystackService, PaystackService>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(20);
+        });
+
         services.AddHttpContextAccessor();
 
         return services;
