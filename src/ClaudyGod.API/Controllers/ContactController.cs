@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using ClaudyGod.API.Attributes;
 using ClaudyGod.Application.Common.Models;
 using ClaudyGod.Application.Features.Contacts.Commands;
 using ClaudyGod.Application.Features.Contacts.Queries;
@@ -11,6 +12,7 @@ namespace ClaudyGod.API.Controllers;
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/contacts")]
+[PublicEndpoint]
 public class ContactController : ControllerBase
 {
     private readonly IMediator _mediator;

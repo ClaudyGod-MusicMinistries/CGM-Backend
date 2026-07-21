@@ -1,5 +1,6 @@
 using ClaudyGod.Application.Common.Interfaces;
 using ClaudyGod.Application.Features.Payments.Commands;
+using ClaudyGod.Domain.Entities;
 using ClaudyGod.Domain.Exceptions;
 using ClaudyGod.Infrastructure.Persistence;
 using FluentAssertions;
@@ -31,7 +32,7 @@ public class RecordPaystackPaymentCommandHandlerTests
     {
         await using var db = NewContext();
         var command = ValidCommand("dup-ref");
-        db.PaystackPayments.Add(Domain.Entities.PaystackPayment.Create(
+        db.PaystackPayments.Add(PaystackPayment.Create(
             "Existing", "existing@example.com", 100m, "NGN", "dup-ref"));
         await db.SaveChangesAsync();
 

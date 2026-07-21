@@ -182,8 +182,10 @@ jobs:
             echo "→ Pulling API image (tag: $TAG)..."
             $COMPOSE pull api
 
-            echo "→ Restarting API..."
-            $COMPOSE up -d --no-deps --remove-orphans api
+            # Keep the API load-balanced across 2 replicas after every deploy — without
+            # --scale, a fresh `up` would silently collapse back to a single instance.
+            echo "→ Restarting API (2 replicas)..."
+            $COMPOSE up -d --no-deps --remove-orphans --scale api=2 api
 
             docker image prune -f --filter "until=24h" >/dev/null
             echo "✓ API deploy complete — $(date -u +%Y-%m-%dT%H:%M:%SZ)"

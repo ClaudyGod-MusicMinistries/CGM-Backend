@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using ClaudyGod.API.Attributes;
 using ClaudyGod.Application.Common.Models;
 using ClaudyGod.Application.Features.AI.Queries;
 using MediatR;
@@ -11,6 +12,7 @@ namespace ClaudyGod.API.Controllers;
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/ai")]
 [EnableRateLimiting("ai")]
+[PublicEndpoint]
 public class AIController : ControllerBase
 {
     private readonly IMediator _mediator;
