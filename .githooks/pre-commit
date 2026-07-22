@@ -18,7 +18,12 @@ die()     { echo -e "${RED}✗${NC} $*" >&2; exit 1; }
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
-mapfile -t STAGED_CS_FILES < <(git diff --cached --name-only --diff-filter=ACMR -- '*.cs')
+# Portable read loop instead of `mapfile` — macOS ships bash 3.2 by default,
+# which predates mapfile/readarray (bash 4+ only).
+STAGED_CS_FILES=()
+while IFS= read -r line; do
+  [[ -n "$line" ]] && STAGED_CS_FILES+=("$line")
+done < <(git diff --cached --name-only --diff-filter=ACMR -- '*.cs')
 
 if [[ ${#STAGED_CS_FILES[@]} -eq 0 ]]; then
   info "No staged .cs files — skipping format check."
