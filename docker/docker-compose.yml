@@ -136,6 +136,11 @@ services:
       # AES-256 encryption
       Encryption__Key: ${ENCRYPTION_KEY}
 
+      # API key gate — ApiKeyMiddleware requires x-api-key on every controller not
+      # marked [PublicEndpoint]. appsettings.json ships an empty ApiKeys array by
+      # design (fail closed) — this env var is the only source of a valid key.
+      Security__ApiKeys__0: ${INTERNAL_API_KEY}
+
       # Paystack (server-side verification — payment features return 503 until this is set)
       Paystack__SecretKey: ${PAYSTACK_SECRET_KEY:-}
 
@@ -193,6 +198,9 @@ services:
       NODE_ENV: production
       # Server-side: Next.js API proxy routes call the .NET API on the internal network
       API_BASE_URL: http://api:8080
+      # Server-side: backendProxy.ts attaches this as x-api-key on every proxied
+      # request — must match the api service's Security__ApiKeys__0 value above.
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
       # Server-side: Paystack secret for /api/payments/* routes
       PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
       # NEXT_PUBLIC_* vars below are documented here but only take effect when
