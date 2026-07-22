@@ -11,7 +11,6 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ghcr.io/claudygod-musicministries/cgm-api
 
-# Prevent concurrent deployments to production
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -25,19 +24,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # Only use PAT for push events (internal branches)
-          # For PRs from forks, fall back to the default GITHUB_TOKEN
           token: ${{ github.event_name == 'pull_request' && secrets.GITHUB_TOKEN || secrets.GH_PAT }}
-          # For PRs, checkout the PR head commit, not the merge ref
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '8.0.x'
-
-      - name: Verify .NET version
-        run: dotnet --version
+      - name: Setup .NET 8
+        run: |
+          # ubuntu-latest ships .NET 8, but ensure it's the default
+          if ! command -v dotnet &> /dev/null; then
+            echo "❌ dotnet not found — installing .NET 8 SDK"
+            curl -sSL https://dot.net/v1/dotnet-install.sh | bash /dev/stdin --channel 8.0
+            echo "$HOME/.dotnet" >> $GITHUB_PATH
+          fi
+          dotnet --version
+          dotnet --list-sdks
 
       - name: Restore dependencies
         run: dotnet restore ClaudyGod.sln
@@ -46,15 +45,7 @@ jobs:
         run: dotnet build ClaudyGod.sln --no-restore -c Release
 
       - name: Test
-        run: dotnet test ClaudyGod.sln --no-build -c Release --logger "console;verbosity=normal" --results-directory TestResults
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results
-          path: TestResults/
-          retention-days: 7
+        run: dotnet test ClaudyGod.sln --no-build -c Release --logger "console;verbosity=normal"
 
   # ─── Build + Push ────────────────────────────────────────────────────────────
   build:
@@ -125,12 +116,7 @@ jobs:
         run: |
           if [ -z "$MIGRATE_CONN" ]; then
             echo "❌ MIGRATE_CONNECTION_STRING secret is not set."
-            echo ""
-            echo "Add it in GitHub → CGM-Backend → Settings → Secrets and variables →"
-            echo "Actions → New repository secret"
-            echo ""
-            echo "  Name:  MIGRATE_CONNECTION_STRING"
-            echo "  Value: <your-supabase-connection-string>"
+            echo "Add it in GitHub → CGM-Backend → Settings → Secrets and variables → Actions"
             exit 1
           fi
 
@@ -156,7 +142,7 @@ jobs:
             echo "| Detail | Value |"
             echo "|--------|-------|"
             echo "| Image | \`${{ env.IMAGE_NAME }}\` |"
-            echo "| Tags | \`latest\`, \`sha-${{ steps.sha.outputs.short }}\` |"
+            echo "| SHA | \`${{ steps.sha.outputs.short }}\` |"
             echo "| Migrations | ✅ Applied |"
           } >> $GITHUB_STEP_SUMMARY
 
@@ -169,11 +155,6 @@ jobs:
     environment: production
 
     steps:
-      - name: Checkout infrastructure code
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GH_PAT }}
-
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         with:
@@ -186,15 +167,16 @@ jobs:
             set -euo pipefail
             export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
             
-            # Trim any whitespace from deploy path
             DEPLOY_PATH="$(echo '${{ secrets.VPS_DEPLOY_PATH }}' | tr -d '[:space:]')"
             cd "$DEPLOY_PATH" || { echo "❌ Failed to cd into $DEPLOY_PATH"; exit 1; }
+
+            # Update infra scripts
+            git fetch origin main && git reset --hard origin/main || true
 
             # Authenticate to GHCR
             echo "${{ secrets.GITHUB_TOKEN }}" | \
               docker login ghcr.io -u '${{ github.actor }}' --password-stdin
 
-            # Set image tag from build output
             export TAG="sha-${{ needs.build.outputs.short-sha }}"
             export IMAGE="${{ env.IMAGE_NAME }}:${TAG}"
 
@@ -209,7 +191,6 @@ jobs:
             echo "→ Deploying API (2 replicas)..."
             $COMPOSE up -d --no-deps --remove-orphans --scale api=2 api
 
-            # Clean up old images
             docker image prune -f --filter "until=24h" >/dev/null 2>&1 || true
             
             echo "✓ Deploy complete — $(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -218,10 +199,11 @@ jobs:
         if: always()
         run: |
           if [ "${{ job.status }}" = "success" ]; then
-            echo "### ✅ Production Deploy Successful" >> $GITHUB_STEP_SUMMARY
-            echo "**Image:** \`${{ env.IMAGE_NAME }}:sha-${{ needs.build.outputs.short-sha }}\`" >> $GITHUB_STEP_SUMMARY
-            echo "**Time:** $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_STEP_SUMMARY
+            {
+              echo "### ✅ Production Deploy Successful"
+              echo "**Image:** \`${{ env.IMAGE_NAME }}:sha-${{ needs.build.outputs.short-sha }}\`"
+              echo "**Time:** $(date -u)"
+            } >> $GITHUB_STEP_SUMMARY
           else
-            echo "### ❌ Production Deploy Failed" >> $GITHUB_STEP_SUMMARY
-            echo "Check the logs above for details." >> $GITHUB_STEP_SUMMARY
+            echo "### ❌ Production Deploy Failed — check logs above" >> $GITHUB_STEP_SUMMARY
           fi
