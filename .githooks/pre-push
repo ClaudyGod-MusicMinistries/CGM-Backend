@@ -16,11 +16,27 @@ info()    { echo -e "${GREEN}→${NC} $*"; }
 success() { echo -e "${GREEN}✓${NC} $*"; }
 die()     { echo -e "${RED}✗${NC} $*" >&2; exit 1; }
 
+# Git hooks run with a leaner PATH than your interactive shell — dotnet may be
+# on your PATH via ~/.zshrc or `brew shellenv`, neither of which non-login
+# processes source. Check the common install locations before giving up.
+find_dotnet() {
+  command -v dotnet >/dev/null 2>&1 && return 0
+  local candidate
+  for candidate in "$HOME/.dotnet" /usr/local/share/dotnet /usr/share/dotnet \
+                   /opt/homebrew/opt/dotnet/libexec /usr/local/opt/dotnet/libexec; do
+    if [[ -x "$candidate/dotnet" ]]; then
+      export PATH="$candidate:$PATH"
+      return 0
+    fi
+  done
+  return 1
+}
+
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
-if ! command -v dotnet >/dev/null 2>&1; then
-  die "dotnet SDK not found on PATH — install .NET 8 SDK to run this hook."
+if ! find_dotnet; then
+  die "dotnet SDK not found on PATH (checked \$HOME/.dotnet, /usr/local/share/dotnet, /usr/share/dotnet, and common Homebrew locations too). Run 'which dotnet' in your terminal to find where it actually lives, then either symlink it into /usr/local/bin, or add its directory to the find_dotnet() candidate list in .githooks/pre-commit and .githooks/pre-push. To skip this check just once: git push --no-verify."
 fi
 
 info "Restoring..."
