@@ -18,9 +18,13 @@ die()     { echo -e "${RED}✗${NC} $*" >&2; exit 1; }
 
 # Git hooks run with a leaner PATH than your interactive shell — dotnet may be
 # on your PATH via ~/.zshrc or `brew shellenv`, neither of which non-login
-# processes source. Check the common install locations before giving up.
+# processes source. Try common install locations first (fast), then fall back
+# to asking your actual login+interactive shell what its real PATH is — that
+# shell is the one that successfully finds dotnet when you type it yourself,
+# so this works regardless of how/where it's installed.
 find_dotnet() {
   command -v dotnet >/dev/null 2>&1 && return 0
+
   local candidate
   for candidate in "$HOME/.dotnet" /usr/local/share/dotnet /usr/share/dotnet \
                    /opt/homebrew/opt/dotnet/libexec /usr/local/opt/dotnet/libexec; do
@@ -29,14 +33,25 @@ find_dotnet() {
       return 0
     fi
   done
-  return 1
+
+  local user_shell raw shell_path
+  user_shell="${SHELL:-/bin/zsh}"
+  # Markers so any startup noise (MOTD, prompt themes, etc.) can't corrupt the
+  # captured PATH — we only trust text between the two markers.
+  raw="$("$user_shell" -ilc 'echo "@@PATH_START@@${PATH}@@PATH_END@@"' 2>/dev/null || true)"
+  shell_path="$(echo "$raw" | sed -n 's/.*@@PATH_START@@\(.*\)@@PATH_END@@.*/\1/p')"
+  if [[ -n "$shell_path" ]]; then
+    export PATH="$shell_path:$PATH"
+  fi
+
+  command -v dotnet >/dev/null 2>&1
 }
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 cd "$REPO_ROOT"
 
 if ! find_dotnet; then
-  die "dotnet SDK not found on PATH (checked \$HOME/.dotnet, /usr/local/share/dotnet, /usr/share/dotnet, and common Homebrew locations too). Run 'which dotnet' in your terminal to find where it actually lives, then either symlink it into /usr/local/bin, or add its directory to the find_dotnet() candidate list in .githooks/pre-commit and .githooks/pre-push. To skip this check just once: git push --no-verify."
+  die "dotnet SDK not found — checked common install locations, and even asked \$SHELL (${SHELL:-unset}) for its real PATH, with no luck. Run 'which dotnet' in your terminal and paste it back so the exact path can be hardcoded into find_dotnet(). To skip this check just once: git push --no-verify."
 fi
 
 info "Restoring..."
