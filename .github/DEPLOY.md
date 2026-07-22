@@ -3,95 +3,59 @@
 ## How it works
 
 ```
-git push → GitHub Actions → builds Docker image → pushes to GHCR → SSHs server → deploys
+git push → GitHub Actions → builds Docker image → pushes to GHCR
+                                                       │
+                                                       ▼
+                                   ClaudyGodweb-Infrastructure repo
+                                   (separate repo — the actual deployment
+                                   source of truth: docker-compose.yml,
+                                   Traefik config, .env, Makefile)
 ```
 
-Every push to `main` triggers the pipeline automatically.
+**This repo (`CGM-Backend`) only builds and pushes the API image to GHCR.** It does not contain the production deployment configuration — that lives entirely in the **`ClaudyGodweb-Infrastructure`** repo, deployed on the server at `~/apps/claudygod/ClaudyGodweb-Infrastructure`.
+
+If you're looking for `docker-compose.yml`, Traefik config, or the real `.env`, they are **not in this repo** — go to `ClaudyGodweb-Infrastructure`.
 
 ---
 
-## GitHub Secrets to configure
+## GitHub Secrets to configure (this repo)
 
-Go to **Settings → Secrets and variables → Actions** in each repo and add:
-
-### Required secrets (both repos)
+Go to **Settings → Secrets and variables → Actions**:
 
 | Secret | Value |
 |--------|-------|
-| `SSH_HOST` | Your server IP or hostname |
-| `SSH_USER` | SSH username (e.g. `ubuntu`) |
-| `SSH_PRIVATE_KEY` | Full private key (`-----BEGIN ... -----END ...`) |
-| `SSH_PORT` | SSH port (default `22`) |
-| `DEPLOY_PATH` | Absolute path to the `docker/` folder on server (e.g. `/opt/claudygod/docker`) |
+| `VPS_HOST` | Server IP or hostname |
+| `VPS_USER` | SSH username |
+| `VPS_SSH_KEY` | Full private key (`-----BEGIN ... -----END ...`) |
+| `VPS_PORT` | SSH port (default `22`) |
+| `VPS_DEPLOY_PATH` | Absolute path to `ClaudyGodweb-Infrastructure` on the server (e.g. `/home/server/apps/claudygod/ClaudyGodweb-Infrastructure`) |
+| `MIGRATE_CONNECTION_STRING` | Supabase connection string used to run EF Core migrations from the CI runner |
 
-### Required variables (website2.0 repo only)
-
-Go to **Settings → Secrets and variables → Actions → Variables** tab:
-
-| Variable | Value |
-|----------|-------|
-| `NEXT_PUBLIC_API_URL` | `https://webApi.claudygod.org` |
-| `NEXT_PUBLIC_SITE_URL` | `https://claudygod.org` |
-
-> Variables (not secrets) are fine for public Next.js env vars — they are baked into the image at build time.
+`GITHUB_TOKEN` (automatic, no setup needed) handles both repo checkout and GHCR push — no custom PAT required.
 
 ---
 
-## GHCR Package visibility
+## What the `deploy` job actually does
 
-After the first push, go to:  
-`https://github.com/orgs/ClaudyGod-MusicMinistries/packages`
-
-Set both packages (`cgm-api`, `cgm-web`) to **Public** — or keep Private and ensure the server has GHCR login configured.
-
-**Log in on the server once:**
-```bash
-echo YOUR_GITHUB_PAT | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
-```
-Use a GitHub PAT with `read:packages` scope. Store the credential permanently — Docker saves it in `~/.docker/config.json`.
-
----
-
-## Server first-time setup
+On every push to `main`, after build+push succeeds, GitHub Actions SSHs into the server and runs, inside `VPS_DEPLOY_PATH`:
 
 ```bash
-# 1. Create external network
-docker network create traefik-public
-
-# 2. Clone the backend repo
-git clone https://github.com/ClaudyGod-MusicMinistries/CGM-Backend.git /opt/claudygod
-cd /opt/claudygod/docker
-
-# 3. Fill in secrets
-cp .env.example .env
-nano .env   # fill every CHANGE_ME
-
-# 4. Login to GHCR
-echo YOUR_PAT | docker login ghcr.io -u YOUR_USERNAME --password-stdin
-
-# 5. First deploy
-./deploy.sh
+docker compose --env-file <path>/.env --project-directory <path> -f <path>/docker/docker-compose.yml pull api
+docker compose ... up -d --no-deps --remove-orphans --scale api=2 api
 ```
 
----
+This only touches the `api` service (2 replicas) — it does not restart `web`, `redis`, or `migrate`. Migrations run separately, from the CI runner directly against Supabase (see the `build` job's "Run database migrations" step) — not on the server.
 
-## Manual deploy / rollback
+## Manual deploy (on the server)
+
+Real, current deployment for the whole stack (`api`, `web`, `redis`, `grafana`, `migrate`) is manual, via `ClaudyGodweb-Infrastructure`'s own tooling:
 
 ```bash
-cd /opt/claudygod/docker
-
-# Deploy latest
-./deploy.sh
-
-# Pin to a specific image (rollback)
-./deploy.sh sha-a1b2c3d
-
-# Restart only the web service
-./deploy.sh --web-only
-
-# Restart only the API
-./deploy.sh --api-only
+cd ~/apps/claudygod/ClaudyGodweb-Infrastructure
+make deploy
 ```
+
+See that repo's own `README.md` / `DEPLOYMENT_GUIDE.md` for the full runbook, environment variables, and rollback steps.
 
 ---
 
@@ -102,6 +66,3 @@ cd /opt/claudygod/docker
 | `latest` | Every push to `main` | Rolling deploys |
 | `sha-xxxxxxx` | Every push | Pinned/rollback deploys |
 | `pr-N` | Pull requests | Preview builds (not pushed) |
-
-# Test Deployment
-Testing git workflow — Tue May 26 12:40:56 WAT 2026

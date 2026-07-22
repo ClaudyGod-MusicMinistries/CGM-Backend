@@ -35,10 +35,6 @@ artifacts/
 appsettings.*.local.json
 appsettings.Development.json
 
-# Docker secrets
-docker/.env
-docker/traefik/acme.json
-
 # OS
 .DS_Store
 Thumbs.db
