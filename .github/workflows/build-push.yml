@@ -24,7 +24,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          token: ${{ github.event_name == 'pull_request' && secrets.GITHUB_TOKEN || secrets.GH_PAT }}
+          # Default GITHUB_TOKEN is sufficient to check out the repo this workflow
+          # runs in — no custom PAT secret to configure/rotate.
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
 
       - name: Setup .NET 8
@@ -63,7 +64,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          token: ${{ github.event_name == 'pull_request' && secrets.GITHUB_TOKEN || secrets.GH_PAT }}
+          # Default GITHUB_TOKEN is sufficient to check out the repo this workflow
+          # runs in — no custom PAT secret to configure/rotate.
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
 
       - name: Get short SHA
