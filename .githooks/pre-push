@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# ─────────────────────────────────────────────────────────────────────────────
+# Pre-push — thorough check: full solution build + full test suite.
+#
+# This is the last line of defense before code leaves your machine. It builds
+# every project (Domain/Application/Infrastructure/API) and runs every test
+# project (Domain.Tests/Application.Tests/Infrastructure.Tests). Mirrors the
+# exact steps CI runs in .github/workflows/build-push.yml's `test` job, so a
+# push that fails here would also have failed CI — you find out now, locally,
+# instead of waiting on a red build.
+# ─────────────────────────────────────────────────────────────────────────────
+set -euo pipefail
+
+GREEN='\033[0;32m'; RED='\033[0;31m'; NC='\033[0m'
+info()    { echo -e "${GREEN}→${NC} $*"; }
+success() { echo -e "${GREEN}✓${NC} $*"; }
+die()     { echo -e "${RED}✗${NC} $*" >&2; exit 1; }
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+if ! command -v dotnet >/dev/null 2>&1; then
+  die "dotnet SDK not found on PATH — install .NET 8 SDK to run this hook."
+fi
+
+info "Restoring..."
+dotnet restore ClaudyGod.sln
+
+info "Building (Release)..."
+dotnet build ClaudyGod.sln --no-restore -c Release || die "Build failed. Fix the errors above before pushing."
+
+info "Running full test suite..."
+dotnet test ClaudyGod.sln --no-build -c Release --logger "console;verbosity=normal" || die "Tests failed. Fix the failing tests above before pushing."
+
+success "Build and tests passed — pushing."
