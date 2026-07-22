@@ -21,13 +21,16 @@ public class PaystackService : IPaystackService
         _http = http;
         _logger = logger;
 
-        var key = config["Paystack:SecretKey"];
+        // PaystackSettings:SecretKey matches the production infra's env var naming
+        // (PaystackSettings__SecretKey); Paystack:SecretKey is the original/local
+        // naming. Same dual-name pattern ClaudeAIService uses for Anthropic:ApiKey.
+        var key = config["PaystackSettings:SecretKey"] ?? config["Paystack:SecretKey"];
         _secretKey = string.IsNullOrWhiteSpace(key) || key.StartsWith("CHANGE-ME", StringComparison.OrdinalIgnoreCase)
             ? null
             : key;
 
         if (_secretKey is null)
-            _logger.LogWarning("Paystack:SecretKey is not configured. Paystack payment features will return 503 until it's set.");
+            _logger.LogWarning("Paystack secret key is not configured. Paystack payment features will return 503 until it's set.");
     }
 
     public async Task<PaystackVerificationResult> VerifyTransactionAsync(string reference, CancellationToken ct = default)
