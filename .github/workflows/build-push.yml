@@ -57,9 +57,6 @@ jobs:
       contents: read
       packages: write
 
-    outputs:
-      short-sha: ${{ steps.sha.outputs.short }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -110,31 +107,46 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # ── Run migrations from CI runner ───────────────────────────────────────
-      - name: Run database migrations
+      # ── Hand off to the infrastructure repo ──────────────────────────────────
+      # ClaudyGodweb-Infrastructure is the single source of truth for what runs
+      # on the production server — it owns the docker-compose.yml, the SSH
+      # deploy script, AND the one-shot `migrate` service. This repo has no
+      # business SSHing into the VPS or applying migrations itself; doing both
+      # here AND in the infra repo's own deploy.yml was two independent,
+      # divergent deploy paths racing to manage the same containers (one of
+      # them still had the pre-rename service name and would have broken or
+      # deleted the frontend container the same way the direct deploy.yml
+      # partial-deploy bug already did once). Repository_dispatch is the one
+      # integration point between the two repos — infra's deploy.yml has
+      # listened for `deploy-api` from day one; this step is what actually
+      # calls it.
+      - name: Trigger deploy in ClaudyGodweb-Infrastructure
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         env:
-          MIGRATE_CONN: ${{ secrets.MIGRATE_CONNECTION_STRING }}
+          GH_PAT: ${{ secrets.GH_PAT }}
         run: |
-          if [ -z "$MIGRATE_CONN" ]; then
-            echo "❌ MIGRATE_CONNECTION_STRING secret is not set."
+          if [ -z "$GH_PAT" ]; then
+            echo "❌ GH_PAT secret is not set (needs repo scope on ClaudyGodweb-Infrastructure)."
             echo "Add it in GitHub → CGM-Backend → Settings → Secrets and variables → Actions"
             exit 1
           fi
 
-          IMAGE_TAG="${{ env.IMAGE_NAME }}:sha-${{ steps.sha.outputs.short }}"
-          
-          echo "→ Pulling image: ${IMAGE_TAG}"
-          docker pull "${IMAGE_TAG}"
+          TAG="sha-${{ steps.sha.outputs.short }}"
+          echo "→ Dispatching deploy-api (tag=$TAG) to ClaudyGodweb-Infrastructure..."
 
-          echo "→ Applying EF Core migrations..."
-          docker run --rm \
-            -e ASPNETCORE_ENVIRONMENT=Production \
-            -e "ConnectionStrings__DefaultConnection=${MIGRATE_CONN}" \
-            "${IMAGE_TAG}" \
-            --migrate
+          http_code=$(curl -sS -o /tmp/dispatch_response.json -w "%{http_code}" \
+            -X POST \
+            -H "Authorization: token ${GH_PAT}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/ClaudyGod-MusicMinistries/ClaudyGodweb-Infrastructure/dispatches \
+            -d "{\"event_type\":\"deploy-api\",\"client_payload\":{\"service\":\"api\",\"tag\":\"${TAG}\"}}")
 
-          echo "✓ Migrations applied successfully"
+          if [ "$http_code" != "204" ]; then
+            echo "❌ Dispatch failed (HTTP $http_code):"
+            cat /tmp/dispatch_response.json
+            exit 1
+          fi
+          echo "✓ Deploy dispatched — infra repo will pull ${TAG}, run migrations, and restart claudygod-api"
 
       - name: Build summary
         if: github.event_name != 'pull_request'
@@ -145,67 +157,7 @@ jobs:
             echo "|--------|-------|"
             echo "| Image | \`${{ env.IMAGE_NAME }}\` |"
             echo "| SHA | \`${{ steps.sha.outputs.short }}\` |"
-            echo "| Migrations | ✅ Applied |"
+            if [ "${{ github.ref }}" = "refs/heads/main" ] && [ "${{ github.event_name }}" = "push" ]; then
+              echo "| Deploy | ➡️ Dispatched to ClaudyGodweb-Infrastructure |"
+            fi
           } >> $GITHUB_STEP_SUMMARY
-
-  # ─── Deploy to Production ────────────────────────────────────────────────────
-  deploy:
-    name: Deploy API to production
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    environment: production
-
-    steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT || 22 }}
-          timeout: 300s
-          script: |
-            set -euo pipefail
-            export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
-            
-            DEPLOY_PATH="$(echo '${{ secrets.VPS_DEPLOY_PATH }}' | tr -d '[:space:]')"
-            cd "$DEPLOY_PATH" || { echo "❌ Failed to cd into $DEPLOY_PATH"; exit 1; }
-
-            # Update infra scripts
-            git fetch origin main && git reset --hard origin/main || true
-
-            # Authenticate to GHCR
-            echo "${{ secrets.GITHUB_TOKEN }}" | \
-              docker login ghcr.io -u '${{ github.actor }}' --password-stdin
-
-            export TAG="sha-${{ needs.build.outputs.short-sha }}"
-            export IMAGE="${{ env.IMAGE_NAME }}:${TAG}"
-
-            COMPOSE="docker compose \
-              --env-file $DEPLOY_PATH/.env \
-              --project-directory $DEPLOY_PATH \
-              -f $DEPLOY_PATH/docker/docker-compose.yml"
-
-            echo "→ Pulling API image: ${IMAGE}"
-            $COMPOSE pull claudygod-api
-
-            echo "→ Deploying API (2 replicas)..."
-            $COMPOSE up -d --no-deps --scale claudygod-api=2 claudygod-api
-
-            docker image prune -f --filter "until=24h" >/dev/null 2>&1 || true
-            
-            echo "✓ Deploy complete — $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-
-      - name: Deployment status
-        if: always()
-        run: |
-          if [ "${{ job.status }}" = "success" ]; then
-            {
-              echo "### ✅ Production Deploy Successful"
-              echo "**Image:** \`${{ env.IMAGE_NAME }}:sha-${{ needs.build.outputs.short-sha }}\`"
-              echo "**Time:** $(date -u)"
-            } >> $GITHUB_STEP_SUMMARY
-          else
-            echo "### ❌ Production Deploy Failed — check logs above" >> $GITHUB_STEP_SUMMARY
-          fi
