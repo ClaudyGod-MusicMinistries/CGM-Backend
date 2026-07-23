@@ -2,7 +2,6 @@ using System.Text;
 using System.Threading.RateLimiting;
 using Asp.Versioning;
 using ClaudyGod.Application;
-using ClaudyGod.Application.Common.Models;
 using ClaudyGod.Infrastructure;
 using ClaudyGod.Infrastructure.Persistence;
 using ClaudyGod.API.Middleware;
@@ -79,27 +78,40 @@ try
         });
     builder.Services.Configure<ApiBehaviorOptions>(options =>
     {
-        // Every other response on this API — success or Fail() — uses ApiResponse's
-        // envelope with content-type application/json. Without this override,
-        // [ApiController]'s automatic model-validation failures (e.g. an unparsable
-        // query enum) instead return ASP.NET's default ValidationProblemDetails as
-        // application/problem+json — a different shape AND a different content
-        // type that callers checking for "application/json" won't recognize.
+        // ExceptionMiddleware translates every thrown exception (FluentValidation
+        // failures, NotFoundException, etc.) into an RFC 7807 ProblemDetails body
+        // with a correlationId and an "errors" field-name -> messages map — that's
+        // this API's one true error shape, and lib/data/client.ts on the frontend
+        // already knows how to parse exactly that. [ApiController]'s automatic
+        // model-validation failures (e.g. an unparsable query enum) bypass the
+        // exception pipeline entirely, so without this override they'd return
+        // ASP.NET's default ValidationProblemDetails instead — same content type,
+        // but a different property set (no correlationId/instance) than every
+        // other error response. Build the identical shape here for consistency.
         options.InvalidModelStateResponseFactory = context =>
         {
-            var errors = context.ModelState
-                .Where(kvp => kvp.Value?.Errors.Count > 0)
-                .SelectMany(kvp => kvp.Value!.Errors.Select(e => e.ErrorMessage))
-                .ToList();
-
             var fieldErrors = context.ModelState
                 .Where(kvp => kvp.Value?.Errors.Count > 0)
                 .ToDictionary(
                     kvp => kvp.Key,
                     kvp => kvp.Value!.Errors.Select(e => e.ErrorMessage).ToArray());
 
-            return new BadRequestObjectResult(
-                ApiResponse.Fail("One or more request values are invalid.", errors, fieldErrors));
+            var problem = new ProblemDetails
+            {
+                Type = "https://httpstatuses.io/400",
+                Title = "Validation Failed",
+                Status = StatusCodes.Status400BadRequest,
+                Detail = "One or more validation errors occurred. See 'errors' for details.",
+                Instance = context.HttpContext.Request.Path,
+            };
+            if (context.HttpContext.Items.TryGetValue(CorrelationIdMiddleware.HeaderName, out var cid))
+                problem.Extensions["correlationId"] = cid;
+            problem.Extensions["errors"] = fieldErrors;
+
+            return new BadRequestObjectResult(problem)
+            {
+                ContentTypes = { "application/problem+json" },
+            };
         };
     });
     builder.Services.AddEndpointsApiExplorer();
