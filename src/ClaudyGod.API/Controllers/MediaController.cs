@@ -39,4 +39,18 @@ public class MediaController : ControllerBase
         var id = await _mediator.Send(new UploadMediaCommand(dto), ct);
         return Ok(ApiResponse<object>.Ok(new { id }, "Media uploaded successfully."));
     }
+
+    /// <summary>
+    /// Registers externally-hosted media (a YouTube link, etc.) with no file
+    /// upload — for video content that lives on YouTube rather than in our
+    /// own storage. See <see cref="Upload"/> for real file uploads.
+    /// </summary>
+    [Authorize(Roles = "Admin,SuperAdmin")]
+    [HttpPost("link")]
+    public async Task<ActionResult<ApiResponse<object>>> CreateLink(
+        [FromBody] CreateMediaLinkRequest dto, CancellationToken ct)
+    {
+        var id = await _mediator.Send(new CreateMediaLinkCommand(dto), ct);
+        return Ok(ApiResponse<object>.Ok(new { id }, "Media link created successfully."));
+    }
 }

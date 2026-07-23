@@ -11,6 +11,13 @@ public class MediaItem : AuditableEntity
     public string FileName { get; private set; } = string.Empty;
     public string ContentType { get; private set; } = string.Empty;
     public long FileSizeBytes { get; private set; }
+    /// <summary>
+    /// Set only for link-created items (see <see cref="CreateLink"/>) — an
+    /// externally-hosted video (YouTube, etc.) with nothing stored via
+    /// IFileStorageService. Null for real uploaded files, which use
+    /// <see cref="FilePath"/> instead.
+    /// </summary>
+    public string? ExternalUrl { get; private set; }
     public string? ThumbnailPath { get; private set; }
     public string? ArtistName { get; private set; }
     public string? AlbumName { get; private set; }
@@ -35,6 +42,24 @@ public class MediaItem : AuditableEntity
             Description = description,
             ArtistName = artistName,
             AlbumName = albumName
+        };
+
+    /// <summary>
+    /// Registers externally-hosted media (a YouTube link, etc.) with no file
+    /// upload — distinct from <see cref="Create"/>, which always stores a
+    /// real file via IFileStorageService. FilePath/FileName/ContentType stay
+    /// empty and FileSizeBytes stays 0 since they don't apply to a link.
+    /// </summary>
+    public static MediaItem CreateLink(string title, MediaType type, string externalUrl,
+        string? thumbnailUrl = null, string? description = null) =>
+        new()
+        {
+            Title = title.Trim(),
+            Type = type,
+            ExternalUrl = externalUrl,
+            ThumbnailPath = thumbnailUrl,
+            Description = description,
+            IsPublished = true
         };
 
     public void Publish() => IsPublished = true;

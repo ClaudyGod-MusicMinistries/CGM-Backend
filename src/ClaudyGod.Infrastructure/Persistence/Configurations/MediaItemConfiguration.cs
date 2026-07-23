@@ -15,7 +15,8 @@ public class MediaItemConfiguration : IEntityTypeConfiguration<MediaItem>
         builder.Property(m => m.FilePath).HasMaxLength(500).IsRequired();
         builder.Property(m => m.FileName).HasMaxLength(300).IsRequired();
         builder.Property(m => m.ContentType).HasMaxLength(100).IsRequired();
-        builder.Property(m => m.ThumbnailPath).HasMaxLength(500);
+        builder.Property(m => m.ExternalUrl).HasMaxLength(1000);
+        builder.Property(m => m.ThumbnailPath).HasMaxLength(1000);
         builder.Property(m => m.ArtistName).HasMaxLength(200);
         builder.Property(m => m.AlbumName).HasMaxLength(200);
 

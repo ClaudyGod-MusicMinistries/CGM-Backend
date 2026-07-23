@@ -1,8 +1,10 @@
 using Asp.Versioning;
 using ClaudyGod.Application.Common.Models;
+using ClaudyGod.Application.Features.Albums.Commands;
 using ClaudyGod.Application.Features.Albums.DTOs;
 using ClaudyGod.Application.Features.Albums.Queries;
 using MediatR;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClaudyGod.API.Controllers;
@@ -24,5 +26,14 @@ public class AlbumController : ControllerBase
     {
         var result = await _mediator.Send(new GetAlbumsQuery(), ct);
         return Ok(ApiResponse<List<AlbumDto>>.Ok(result));
+    }
+
+    [Authorize(Roles = "Admin,SuperAdmin")]
+    [HttpPost]
+    public async Task<ActionResult<ApiResponse<object>>> Create(
+        [FromBody] CreateAlbumRequest dto, CancellationToken ct)
+    {
+        var id = await _mediator.Send(new CreateAlbumCommand(dto), ct);
+        return CreatedAtAction(nameof(GetAll), ApiResponse<object>.Ok(new { id }, "Album created."));
     }
 }

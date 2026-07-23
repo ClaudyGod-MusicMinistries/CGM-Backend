@@ -35,6 +35,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<Reel> Reels => Set<Reel>();
     public DbSet<Album> Albums => Set<Album>();
+    public DbSet<Product> Products => Set<Product>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<PaystackPayment> PaystackPayments => Set<PaystackPayment>();
     public DbSet<FAQ> FAQs => Set<FAQ>();
@@ -56,6 +57,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
         modelBuilder.Entity<TicketReservation>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<User>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Reel>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Product>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Order>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<PaystackPayment>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<FAQ>().HasQueryFilter(e => !e.IsDeleted && e.IsPublished);

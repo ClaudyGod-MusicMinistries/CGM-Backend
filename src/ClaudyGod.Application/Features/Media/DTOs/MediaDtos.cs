@@ -11,6 +11,13 @@ public record UploadMediaRequest(
     string? ArtistName,
     string? AlbumName);
 
+public record CreateMediaLinkRequest(
+    string Title,
+    MediaType Type,
+    string ExternalUrl,
+    string? ThumbnailUrl = null,
+    string? Description = null);
+
 public record MediaItemDto(
     Guid Id,
     string Title,
