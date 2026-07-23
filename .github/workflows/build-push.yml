@@ -188,10 +188,10 @@ jobs:
               -f $DEPLOY_PATH/docker/docker-compose.yml"
 
             echo "→ Pulling API image: ${IMAGE}"
-            $COMPOSE pull api
+            $COMPOSE pull claudygod-api
 
             echo "→ Deploying API (2 replicas)..."
-            $COMPOSE up -d --no-deps --remove-orphans --scale api=2 api
+            $COMPOSE up -d --no-deps --scale claudygod-api=2 claudygod-api
 
             docker image prune -f --filter "until=24h" >/dev/null 2>&1 || true
             
