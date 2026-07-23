@@ -22,11 +22,24 @@ public class MediaController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PaginatedResult<MediaItemDto>>>> GetAll(
         [FromQuery] int page = 1, [FromQuery] int pageSize = 20,
-        [FromQuery] MediaType? type = null,
+        [FromQuery] string? type = null,
         [FromQuery] bool? isPublished = null,
         CancellationToken ct = default)
     {
-        var result = await _mediator.Send(new GetMediaQuery(page, pageSize, type, isPublished), ct);
+        MediaType? parsedType = null;
+        if (!string.IsNullOrEmpty(type))
+        {
+            if (!Enum.TryParse<MediaType>(type, ignoreCase: true, out var value))
+            {
+                var valid = string.Join(", ", Enum.GetNames<MediaType>());
+                return BadRequest(ApiResponse<PaginatedResult<MediaItemDto>>.Fail(
+                    $"'{type}' is not a valid media type.",
+                    [$"type must be one of: {valid}"]));
+            }
+            parsedType = value;
+        }
+
+        var result = await _mediator.Send(new GetMediaQuery(page, pageSize, parsedType, isPublished), ct);
         return Ok(ApiResponse<PaginatedResult<MediaItemDto>>.Ok(result));
     }
 
