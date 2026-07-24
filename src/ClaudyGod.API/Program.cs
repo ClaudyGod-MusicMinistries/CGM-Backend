@@ -269,6 +269,24 @@ try
             });
         });
 
+        // Comment/like endpoints — anonymous, public, no login gate, so this is
+        // the main spam/abuse defense besides the honeypot field on create.
+        // 8 comments/10 minutes per IP is generous for a real visitor, tight
+        // enough to blunt a scripted burst.
+        options.AddPolicy("comments", ctx =>
+        {
+            var ip = ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
+                     ?? ctx.Connection.RemoteIpAddress?.ToString()
+                     ?? "unknown";
+            return RateLimitPartition.GetFixedWindowLimiter($"comments:{ip}", _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 8,
+                Window = TimeSpan.FromMinutes(10),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+        });
+
         options.OnRejected = async (ctx, token) =>
         {
             ctx.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
