@@ -13,13 +13,13 @@ namespace ClaudyGod.API.Controllers;
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/tickets")]
-[PublicEndpoint]
 public class TicketController : ControllerBase
 {
     private readonly IMediator _mediator;
 
     public TicketController(IMediator mediator) => _mediator = mediator;
 
+    [PublicEndpoint]
     [HttpPost]
     public async Task<ActionResult<ApiResponse<object>>> Reserve(
         [FromBody] ReserveTicketRequest dto, CancellationToken ct)
@@ -36,5 +36,12 @@ public class TicketController : ControllerBase
     {
         var result = await _mediator.Send(new GetTicketsQuery(eventId, page, pageSize, status), ct);
         return Ok(ApiResponse<PaginatedResult<TicketDto>>.Ok(result));
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<ActionResult<ApiResponse>> Delete(Guid id, CancellationToken ct)
+    {
+        await _mediator.Send(new DeleteTicketCommand(id), ct);
+        return Ok(ApiResponse.Ok("Ticket reservation moved to trash."));
     }
 }

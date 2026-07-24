@@ -36,6 +36,8 @@ public record CreateCommentRequest(
 
 public record UpdateCommentStatusRequest(string Status);
 
-public record LikeRequest(string VisitorToken);
+public record SetReactionRequest(string VisitorToken, string Emoji);
 
-public record LikeStatusDto(int Count, bool LikedByYou);
+public record RemoveReactionRequest(string VisitorToken);
+
+public record ReactionSummaryDto(Dictionary<string, int> Counts, string? YourReaction);

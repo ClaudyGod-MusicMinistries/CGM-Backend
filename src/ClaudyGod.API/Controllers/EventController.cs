@@ -62,6 +62,13 @@ public class EventController : ControllerBase
         await _mediator.Send(new UpdateEventStatusCommand(id, parsed.ToString()), ct);
         return Ok(ApiResponse.Ok("Event status updated."));
     }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<ActionResult<ApiResponse>> Delete(Guid id, CancellationToken ct)
+    {
+        await _mediator.Send(new DeleteEventCommand(id), ct);
+        return Ok(ApiResponse.Ok("Event moved to trash."));
+    }
 }
 
 public record UpdateEventStatusRequest(string Status);

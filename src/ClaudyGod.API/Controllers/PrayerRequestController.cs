@@ -36,6 +36,13 @@ public class PrayerRequestController : ControllerBase
         var result = await _mediator.Send(new GetPrayerRequestsQuery(page, pageSize, status, includeConfidential), ct);
         return Ok(ApiResponse<PaginatedResult<PrayerRequestDto>>.Ok(result));
     }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<ActionResult<ApiResponse>> Delete(Guid id, CancellationToken ct)
+    {
+        await _mediator.Send(new DeletePrayerRequestCommand(id), ct);
+        return Ok(ApiResponse.Ok("Prayer request moved to trash."));
+    }
 }
 
 public record SubmitPrayerRequestDto(

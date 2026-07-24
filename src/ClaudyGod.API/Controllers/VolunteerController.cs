@@ -12,13 +12,13 @@ namespace ClaudyGod.API.Controllers;
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/volunteers")]
-[PublicEndpoint]
 public class VolunteerController : ControllerBase
 {
     private readonly IMediator _mediator;
 
     public VolunteerController(IMediator mediator) => _mediator = mediator;
 
+    [PublicEndpoint]
     [HttpPost]
     public async Task<ActionResult<ApiResponse<object>>> Register(
         [FromBody] RegisterVolunteerRequest dto, CancellationToken ct)
@@ -34,5 +34,12 @@ public class VolunteerController : ControllerBase
     {
         var result = await _mediator.Send(new GetVolunteersQuery(page, pageSize, isApproved), ct);
         return Ok(ApiResponse<PaginatedResult<VolunteerDto>>.Ok(result));
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<ActionResult<ApiResponse>> Delete(Guid id, CancellationToken ct)
+    {
+        await _mediator.Send(new DeleteVolunteerCommand(id), ct);
+        return Ok(ApiResponse.Ok("Volunteer application moved to trash."));
     }
 }

@@ -30,7 +30,7 @@ public interface IApplicationDbContext
     DbSet<PaystackPayment> PaystackPayments { get; }
     DbSet<FAQ> FAQs { get; }
     DbSet<Comment> Comments { get; }
-    DbSet<PostLike> PostLikes { get; }
+    DbSet<Reaction> Reactions { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
