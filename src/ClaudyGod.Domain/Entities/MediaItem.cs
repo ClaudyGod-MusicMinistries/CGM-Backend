@@ -68,4 +68,21 @@ public class MediaItem : AuditableEntity
     public void IncrementDownload() => DownloadCount++;
     public void SetThumbnail(string path) => ThumbnailPath = path;
     public void SetDuration(int seconds) => DurationSeconds = seconds;
+
+    /// <summary>
+    /// Edits a link-created item's metadata — title, type, the external URL
+    /// itself, thumbnail, and description. Only meaningful for items created
+    /// via <see cref="CreateLink"/>; a real uploaded file's binary content
+    /// (FilePath/FileName/ContentType/FileSizeBytes) is immutable by design,
+    /// so this never touches those fields.
+    /// </summary>
+    public void UpdateLink(string title, MediaType type, string externalUrl,
+        string? thumbnailUrl, string? description)
+    {
+        Title = title.Trim();
+        Type = type;
+        ExternalUrl = externalUrl;
+        ThumbnailPath = thumbnailUrl;
+        Description = description;
+    }
 }

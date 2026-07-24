@@ -2,7 +2,6 @@ using Asp.Versioning;
 using ClaudyGod.Application.Common.Models;
 using ClaudyGod.Application.Features.Admin.Queries;
 using MediatR;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClaudyGod.API.Controllers;
@@ -10,7 +9,6 @@ namespace ClaudyGod.API.Controllers;
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/admin")]
-[Authorize(Roles = "Admin,SuperAdmin")]
 public class AdminController : ControllerBase
 {
     private readonly IMediator _mediator;

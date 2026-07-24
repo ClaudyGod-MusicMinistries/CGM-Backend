@@ -5,7 +5,6 @@ using ClaudyGod.Application.Features.Blog.DTOs;
 using ClaudyGod.Application.Features.Blog.Queries;
 using ClaudyGod.Domain.Enums;
 using MediatR;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClaudyGod.API.Controllers;
@@ -39,7 +38,6 @@ public class BlogController : ControllerBase
         return Ok(ApiResponse<BlogPostDetailDto>.Ok(result));
     }
 
-    [Authorize(Roles = "Admin,SuperAdmin")]
     [HttpPost]
     public async Task<ActionResult<ApiResponse<object>>> Create(
         [FromBody] CreateBlogPostRequest dto, CancellationToken ct)
@@ -49,7 +47,6 @@ public class BlogController : ControllerBase
             ApiResponse<object>.Ok(new { id }, "Blog post created."));
     }
 
-    [Authorize(Roles = "Admin,SuperAdmin")]
     [HttpPut("{id:guid}")]
     public async Task<ActionResult<ApiResponse>> Update(
         Guid id, [FromBody] UpdateBlogPostRequest dto, CancellationToken ct)
@@ -58,7 +55,6 @@ public class BlogController : ControllerBase
         return Ok(ApiResponse.Ok("Blog post updated."));
     }
 
-    [Authorize(Roles = "Admin,SuperAdmin")]
     [HttpDelete("{id:guid}")]
     public async Task<ActionResult<ApiResponse>> Delete(Guid id, CancellationToken ct)
     {

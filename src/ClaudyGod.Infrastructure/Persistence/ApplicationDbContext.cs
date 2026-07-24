@@ -61,6 +61,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
         modelBuilder.Entity<Order>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<PaystackPayment>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<FAQ>().HasQueryFilter(e => !e.IsDeleted && e.IsPublished);
+        modelBuilder.Entity<Album>().HasQueryFilter(e => !e.IsDeleted);
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

@@ -8,3 +8,9 @@ public class FAQDto
     public string Category { get; set; } = string.Empty;
     public int Order { get; set; }
 }
+
+public record CreateFAQRequest(
+    string Question,
+    string Answer,
+    string Category,
+    int Order = 0);

@@ -42,4 +42,26 @@ public class Product : AuditableEntity
     public void Publish() => IsPublished = true;
     public void Unpublish() => IsPublished = false;
     public void UpdateStock(bool inStock, int? quantity) => (InStock, Quantity) = (inStock, quantity);
+
+    public void Update(
+        string title,
+        string description,
+        decimal price,
+        string imageUrl,
+        string category,
+        bool inStock,
+        int? quantity,
+        decimal? rating,
+        int sortOrder)
+    {
+        Title = title.Trim();
+        Description = description.Trim();
+        Price = price;
+        ImageUrl = imageUrl;
+        Category = category;
+        InStock = inStock;
+        Quantity = quantity;
+        Rating = rating;
+        SortOrder = sortOrder;
+    }
 }

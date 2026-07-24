@@ -4,7 +4,6 @@ using ClaudyGod.Application.Features.Store.Commands;
 using ClaudyGod.Application.Features.Store.DTOs;
 using ClaudyGod.Application.Features.Store.Queries;
 using MediatR;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClaudyGod.API.Controllers;
@@ -26,13 +25,27 @@ public class StoreController : ControllerBase
         return Ok(ApiResponse<List<ProductDto>>.Ok(result));
     }
 
-    [Authorize(Roles = "Admin,SuperAdmin")]
     [HttpPost("products")]
     public async Task<ActionResult<ApiResponse<object>>> CreateProduct(
         [FromBody] CreateProductRequest dto, CancellationToken ct)
     {
         var id = await _mediator.Send(new CreateProductCommand(dto), ct);
         return CreatedAtAction(nameof(GetProducts), ApiResponse<object>.Ok(new { id }, "Product created."));
+    }
+
+    [HttpPut("products/{id:guid}")]
+    public async Task<ActionResult<ApiResponse>> UpdateProduct(
+        Guid id, [FromBody] CreateProductRequest dto, CancellationToken ct)
+    {
+        await _mediator.Send(new UpdateProductCommand(id, dto), ct);
+        return Ok(ApiResponse.Ok("Product updated."));
+    }
+
+    [HttpDelete("products/{id:guid}")]
+    public async Task<ActionResult<ApiResponse>> DeleteProduct(Guid id, CancellationToken ct)
+    {
+        await _mediator.Send(new DeleteProductCommand(id), ct);
+        return Ok(ApiResponse.Ok("Product deleted."));
     }
 
     [HttpPost("checkout")]

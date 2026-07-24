@@ -4,7 +4,6 @@ using ClaudyGod.Application.Features.Subscribers.Commands;
 using ClaudyGod.Application.Features.Subscribers.DTOs;
 using ClaudyGod.Application.Features.Subscribers.Queries;
 using MediatR;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClaudyGod.API.Controllers;
@@ -34,7 +33,6 @@ public class SubscriberController : ControllerBase
         return Ok(ApiResponse.Ok("You have been unsubscribed."));
     }
 
-    [Authorize(Roles = "Admin,SuperAdmin")]
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PaginatedResult<SubscriberDto>>>> GetAll(
         [FromQuery] int page = 1, [FromQuery] int pageSize = 20,

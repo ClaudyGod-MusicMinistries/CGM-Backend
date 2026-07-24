@@ -4,7 +4,6 @@ using ClaudyGod.Application.Features.Albums.Commands;
 using ClaudyGod.Application.Features.Albums.DTOs;
 using ClaudyGod.Application.Features.Albums.Queries;
 using MediatR;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClaudyGod.API.Controllers;
@@ -28,12 +27,26 @@ public class AlbumController : ControllerBase
         return Ok(ApiResponse<List<AlbumDto>>.Ok(result));
     }
 
-    [Authorize(Roles = "Admin,SuperAdmin")]
     [HttpPost]
     public async Task<ActionResult<ApiResponse<object>>> Create(
         [FromBody] CreateAlbumRequest dto, CancellationToken ct)
     {
         var id = await _mediator.Send(new CreateAlbumCommand(dto), ct);
         return CreatedAtAction(nameof(GetAll), ApiResponse<object>.Ok(new { id }, "Album created."));
+    }
+
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<ApiResponse>> Update(
+        Guid id, [FromBody] CreateAlbumRequest dto, CancellationToken ct)
+    {
+        await _mediator.Send(new UpdateAlbumCommand(id, dto), ct);
+        return Ok(ApiResponse.Ok("Album updated."));
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<ActionResult<ApiResponse>> Delete(Guid id, CancellationToken ct)
+    {
+        await _mediator.Send(new DeleteAlbumCommand(id), ct);
+        return Ok(ApiResponse.Ok("Album deleted."));
     }
 }

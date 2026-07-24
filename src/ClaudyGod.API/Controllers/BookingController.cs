@@ -6,7 +6,6 @@ using ClaudyGod.Application.Features.Bookings.DTOs;
 using ClaudyGod.Application.Features.Bookings.Queries;
 using ClaudyGod.Domain.Enums;
 using MediatR;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClaudyGod.API.Controllers;
@@ -29,7 +28,6 @@ public class BookingController : ControllerBase
         return Ok(ApiResponse<object>.Ok(new { id }, "Booking request submitted successfully."));
     }
 
-    [Authorize(Roles = "Admin,SuperAdmin")]
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PaginatedResult<BookingDto>>>> GetAll(
         [FromQuery] int page = 1, [FromQuery] int pageSize = 20,
@@ -39,7 +37,6 @@ public class BookingController : ControllerBase
         return Ok(ApiResponse<PaginatedResult<BookingDto>>.Ok(result));
     }
 
-    [Authorize(Roles = "Admin,SuperAdmin")]
     [HttpPatch("{id:guid}/status")]
     public async Task<ActionResult<ApiResponse>> UpdateStatus(
         Guid id, [FromBody] UpdateBookingStatusRequest dto, CancellationToken ct)
