@@ -5,7 +5,6 @@ using ClaudyGod.Application.Features.Events.DTOs;
 using ClaudyGod.Application.Features.Events.Queries;
 using ClaudyGod.Domain.Enums;
 using MediatR;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClaudyGod.API.Controllers;
@@ -35,7 +34,6 @@ public class EventController : ControllerBase
         return Ok(ApiResponse<EventDetailDto>.Ok(result));
     }
 
-    [Authorize(Roles = "Admin,SuperAdmin")]
     [HttpPost]
     public async Task<ActionResult<ApiResponse<object>>> Create(
         [FromBody] CreateEventRequest dto, CancellationToken ct)
@@ -45,7 +43,14 @@ public class EventController : ControllerBase
             ApiResponse<object>.Ok(new { id }, "Event created."));
     }
 
-    [Authorize(Roles = "Admin,SuperAdmin")]
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<ApiResponse>> Update(
+        Guid id, [FromBody] CreateEventRequest dto, CancellationToken ct)
+    {
+        await _mediator.Send(new UpdateEventCommand(id, dto), ct);
+        return Ok(ApiResponse.Ok("Event updated."));
+    }
+
     [HttpPatch("{id:guid}/status")]
     public async Task<ActionResult<ApiResponse>> UpdateStatus(
         Guid id, [FromBody] UpdateEventStatusRequest dto, CancellationToken ct)

@@ -1,4 +1,5 @@
 using ClaudyGod.Domain.Enums;
+using ClaudyGod.Domain.Exceptions;
 using ClaudyGod.Domain.ValueObjects;
 
 namespace ClaudyGod.Domain.Entities;
@@ -45,4 +46,23 @@ public class Event : AuditableEntity
     public void Complete() => Status = EventStatus.Completed;
     public void Postpone() => Status = EventStatus.Postponed;
     public void SetFlyer(string path) => FlyerImagePath = path;
+
+    public void Update(string title, DateTime startDate, int totalCapacity,
+        string? description, string? venue, Address? location,
+        DateTime? endDate, bool isFree, decimal? ticketPrice)
+    {
+        if (totalCapacity < ReservedCount)
+            throw new DomainException(
+                $"Total capacity ({totalCapacity}) cannot be less than the {ReservedCount} seats already reserved.");
+
+        Title = title.Trim();
+        Description = description;
+        Venue = venue;
+        Location = location;
+        StartDate = startDate;
+        EndDate = endDate;
+        TotalCapacity = totalCapacity;
+        IsFree = isFree;
+        TicketPrice = ticketPrice;
+    }
 }

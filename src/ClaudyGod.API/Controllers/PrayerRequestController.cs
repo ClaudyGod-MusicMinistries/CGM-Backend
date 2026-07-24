@@ -4,7 +4,6 @@ using ClaudyGod.Application.Features.PrayerRequests.Commands;
 using ClaudyGod.Application.Features.PrayerRequests.Queries;
 using ClaudyGod.Domain.Enums;
 using MediatR;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClaudyGod.API.Controllers;
@@ -27,7 +26,6 @@ public class PrayerRequestController : ControllerBase
         return Ok(ApiResponse<object>.Ok(new { id }, "Prayer request submitted. We will intercede for you."));
     }
 
-    [Authorize(Roles = "Admin,SuperAdmin")]
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PaginatedResult<PrayerRequestDto>>>> GetAll(
         [FromQuery] int page = 1, [FromQuery] int pageSize = 20,

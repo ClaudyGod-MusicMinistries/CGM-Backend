@@ -42,4 +42,26 @@ public class Album : AuditableEntity
     public void Publish() => IsPublished = true;
     public void Unpublish() => IsPublished = false;
     public void UpdateSortOrder(int order) => SortOrder = order;
+
+    public void Update(
+        string title,
+        string? imageUrl,
+        string? spotifyUrl,
+        string? appleUrl,
+        string? youtubeUrl,
+        string? deezerUrl,
+        string? amazonUrl,
+        int sortOrder,
+        DateTime? releasedAt)
+    {
+        Title = title.Trim();
+        ImageUrl = imageUrl;
+        SpotifyUrl = spotifyUrl;
+        AppleUrl = appleUrl;
+        YoutubeUrl = youtubeUrl;
+        DeezerUrl = deezerUrl;
+        AmazonUrl = amazonUrl;
+        SortOrder = sortOrder;
+        ReleasedAt = releasedAt;
+    }
 }

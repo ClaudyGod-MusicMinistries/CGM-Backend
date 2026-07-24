@@ -5,7 +5,6 @@ using ClaudyGod.Application.Features.Volunteers.Commands;
 using ClaudyGod.Application.Features.Volunteers.DTOs;
 using ClaudyGod.Application.Features.Volunteers.Queries;
 using MediatR;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClaudyGod.API.Controllers;
@@ -28,7 +27,6 @@ public class VolunteerController : ControllerBase
         return Ok(ApiResponse<object>.Ok(new { id }, "Volunteer registration submitted."));
     }
 
-    [Authorize(Roles = "Admin,SuperAdmin")]
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PaginatedResult<VolunteerDto>>>> GetAll(
         [FromQuery] int page = 1, [FromQuery] int pageSize = 20,

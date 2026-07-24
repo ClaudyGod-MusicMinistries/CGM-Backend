@@ -6,7 +6,6 @@ using ClaudyGod.Application.Features.Tickets.DTOs;
 using ClaudyGod.Application.Features.Tickets.Queries;
 using ClaudyGod.Domain.Enums;
 using MediatR;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClaudyGod.API.Controllers;
@@ -29,7 +28,6 @@ public class TicketController : ControllerBase
         return Ok(ApiResponse<object>.Ok(new { confirmationCode }, "Ticket reserved successfully."));
     }
 
-    [Authorize(Roles = "Admin,SuperAdmin")]
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PaginatedResult<TicketDto>>>> GetAll(
         [FromQuery] Guid? eventId = null, [FromQuery] int page = 1,

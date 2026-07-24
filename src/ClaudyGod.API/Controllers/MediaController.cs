@@ -5,7 +5,6 @@ using ClaudyGod.Application.Features.Media.DTOs;
 using ClaudyGod.Application.Features.Media.Queries;
 using ClaudyGod.Domain.Enums;
 using MediatR;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClaudyGod.API.Controllers;
@@ -43,7 +42,6 @@ public class MediaController : ControllerBase
         return Ok(ApiResponse<PaginatedResult<MediaItemDto>>.Ok(result));
     }
 
-    [Authorize(Roles = "Admin,SuperAdmin")]
     [HttpPost]
     [RequestSizeLimit(500 * 1024 * 1024)]
     public async Task<ActionResult<ApiResponse<object>>> Upload(
@@ -58,12 +56,30 @@ public class MediaController : ControllerBase
     /// upload — for video content that lives on YouTube rather than in our
     /// own storage. See <see cref="Upload"/> for real file uploads.
     /// </summary>
-    [Authorize(Roles = "Admin,SuperAdmin")]
     [HttpPost("link")]
     public async Task<ActionResult<ApiResponse<object>>> CreateLink(
         [FromBody] CreateMediaLinkRequest dto, CancellationToken ct)
     {
         var id = await _mediator.Send(new CreateMediaLinkCommand(dto), ct);
         return Ok(ApiResponse<object>.Ok(new { id }, "Media link created successfully."));
+    }
+
+    /// <summary>
+    /// Edits a link-created item's metadata. Real uploaded files have no
+    /// update path — their binary content is immutable, only Delete applies.
+    /// </summary>
+    [HttpPut("link/{id:guid}")]
+    public async Task<ActionResult<ApiResponse>> UpdateLink(
+        Guid id, [FromBody] CreateMediaLinkRequest dto, CancellationToken ct)
+    {
+        await _mediator.Send(new UpdateMediaLinkCommand(id, dto), ct);
+        return Ok(ApiResponse.Ok("Media link updated."));
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<ActionResult<ApiResponse>> Delete(Guid id, CancellationToken ct)
+    {
+        await _mediator.Send(new DeleteMediaCommand(id), ct);
+        return Ok(ApiResponse.Ok("Media item deleted."));
     }
 }
