@@ -39,6 +39,8 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<PaystackPayment> PaystackPayments => Set<PaystackPayment>();
     public DbSet<FAQ> FAQs => Set<FAQ>();
+    public DbSet<Comment> Comments => Set<Comment>();
+    public DbSet<PostLike> PostLikes => Set<PostLike>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -62,6 +64,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
         modelBuilder.Entity<PaystackPayment>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<FAQ>().HasQueryFilter(e => !e.IsDeleted && e.IsPublished);
         modelBuilder.Entity<Album>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Comment>().HasQueryFilter(e => !e.IsDeleted);
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
