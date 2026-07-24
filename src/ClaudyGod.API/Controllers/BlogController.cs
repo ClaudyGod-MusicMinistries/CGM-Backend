@@ -61,4 +61,53 @@ public class BlogController : ControllerBase
         await _mediator.Send(new DeleteBlogPostCommand(id), ct);
         return Ok(ApiResponse.Ok("Blog post deleted."));
     }
+
+    [HttpPatch("{id:guid}/status")]
+    public async Task<ActionResult<ApiResponse>> UpdateStatus(
+        Guid id, [FromBody] UpdateBlogPostStatusRequest dto, CancellationToken ct)
+    {
+        if (!Enum.TryParse<BlogPostStatus>(dto.Status, ignoreCase: true, out var parsed))
+            return BadRequest(ApiResponse.Fail(
+                $"Invalid blog post status '{dto.Status}'. Valid values: {string.Join(", ", Enum.GetNames<BlogPostStatus>())}"));
+
+        await _mediator.Send(new UpdateBlogPostStatusCommand(id, parsed), ct);
+        return Ok(ApiResponse.Ok("Blog post status updated."));
+    }
+
+    // ── Categories & tags ──────────────────────────────────────────────────
+    // Literal segments ("categories", "tags") are matched ahead of the
+    // parameterized {slug} route above — standard ASP.NET routing precedence,
+    // no ambiguity with GetBySlug.
+
+    [HttpGet("categories")]
+    public async Task<ActionResult<ApiResponse<List<BlogCategoryDto>>>> GetCategories(CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetBlogCategoriesQuery(), ct);
+        return Ok(ApiResponse<List<BlogCategoryDto>>.Ok(result));
+    }
+
+    [HttpPost("categories")]
+    public async Task<ActionResult<ApiResponse<object>>> CreateCategory(
+        [FromBody] CreateBlogCategoryRequest dto, CancellationToken ct)
+    {
+        var id = await _mediator.Send(new CreateBlogCategoryCommand(dto), ct);
+        return CreatedAtAction(nameof(GetCategories), ApiResponse<object>.Ok(new { id }, "Category created."));
+    }
+
+    [HttpGet("tags")]
+    public async Task<ActionResult<ApiResponse<List<BlogTagDto>>>> GetTags(CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetBlogTagsQuery(), ct);
+        return Ok(ApiResponse<List<BlogTagDto>>.Ok(result));
+    }
+
+    [HttpPost("tags")]
+    public async Task<ActionResult<ApiResponse<object>>> CreateTag(
+        [FromBody] CreateBlogTagRequest dto, CancellationToken ct)
+    {
+        var id = await _mediator.Send(new CreateBlogTagCommand(dto), ct);
+        return CreatedAtAction(nameof(GetTags), ApiResponse<object>.Ok(new { id }, "Tag created."));
+    }
 }
+
+public record UpdateBlogPostStatusRequest(string Status);
