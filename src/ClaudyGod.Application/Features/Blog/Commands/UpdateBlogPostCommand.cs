@@ -36,6 +36,8 @@ public class UpdateBlogPostCommandHandler : IRequestHandler<UpdateBlogPostComman
         var r = request.Request;
         post.Update(r.Title, r.Slug, r.Content, r.Excerpt, r.AuthorName, r.CategoryId);
 
+        if (!string.IsNullOrWhiteSpace(r.FeaturedImageUrl)) post.SetFeaturedImage(r.FeaturedImageUrl);
+
         post.PostTags.Clear();
         if (r.TagIds?.Count > 0)
         {

@@ -35,6 +35,7 @@ public class CreateBlogPostCommandHandler : IRequestHandler<CreateBlogPostComman
 
         var post = BlogPost.Create(r.Title, r.Slug, r.Content, r.Excerpt, r.AuthorName, r.CategoryId);
 
+        if (!string.IsNullOrWhiteSpace(r.FeaturedImageUrl)) post.SetFeaturedImage(r.FeaturedImageUrl);
         if (r.Publish) post.Publish();
 
         if (r.TagIds?.Count > 0)
