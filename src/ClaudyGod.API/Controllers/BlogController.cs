@@ -3,9 +3,13 @@ using ClaudyGod.Application.Common.Models;
 using ClaudyGod.Application.Features.Blog.Commands;
 using ClaudyGod.Application.Features.Blog.DTOs;
 using ClaudyGod.Application.Features.Blog.Queries;
+using ClaudyGod.Application.Features.Comments.Commands;
+using ClaudyGod.Application.Features.Comments.DTOs;
+using ClaudyGod.Application.Features.Comments.Queries;
 using ClaudyGod.Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace ClaudyGod.API.Controllers;
 
@@ -107,6 +111,57 @@ public class BlogController : ControllerBase
     {
         var id = await _mediator.Send(new CreateBlogTagCommand(dto), ct);
         return CreatedAtAction(nameof(GetTags), ApiResponse<object>.Ok(new { id }, "Tag created."));
+    }
+
+    // ── Comments & likes ─────────────────────────────────────────────────────
+    // Post-scoped, public, anonymous (no login exists on the website) — the
+    // admin moderation actions (list all/approve/reject/delete) live on the
+    // separate top-level CommentController since they aren't post-scoped.
+
+    [HttpGet("{id:guid}/comments")]
+    public async Task<ActionResult<ApiResponse<List<CommentDto>>>> GetComments(
+        Guid id, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetCommentsForPostQuery(id), ct);
+        return Ok(ApiResponse<List<CommentDto>>.Ok(result));
+    }
+
+    [EnableRateLimiting("comments")]
+    [HttpPost("{id:guid}/comments")]
+    public async Task<ActionResult<ApiResponse<object>>> CreateComment(
+        Guid id, [FromBody] CreateCommentRequest dto, CancellationToken ct)
+    {
+        var commentId = await _mediator.Send(new CreateCommentCommand(id, dto), ct);
+        // A tripped honeypot returns the same success shape with no real id —
+        // the caller (bot or human) can't tell the difference.
+        return Ok(ApiResponse<object>.Ok(new { id = commentId },
+            "Comment submitted — it will appear once approved."));
+    }
+
+    [HttpGet("{id:guid}/likes")]
+    public async Task<ActionResult<ApiResponse<LikeStatusDto>>> GetLikeStatus(
+        Guid id, [FromQuery] string? visitorToken, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetLikeStatusQuery(id, visitorToken), ct);
+        return Ok(ApiResponse<LikeStatusDto>.Ok(result));
+    }
+
+    [EnableRateLimiting("comments")]
+    [HttpPost("{id:guid}/like")]
+    public async Task<ActionResult<ApiResponse<object>>> Like(
+        Guid id, [FromBody] LikeRequest dto, CancellationToken ct)
+    {
+        var count = await _mediator.Send(new LikePostCommand(id, dto.VisitorToken), ct);
+        return Ok(ApiResponse<object>.Ok(new { count }, "Liked."));
+    }
+
+    [EnableRateLimiting("comments")]
+    [HttpDelete("{id:guid}/like")]
+    public async Task<ActionResult<ApiResponse<object>>> Unlike(
+        Guid id, [FromQuery] string visitorToken, CancellationToken ct)
+    {
+        var count = await _mediator.Send(new UnlikePostCommand(id, visitorToken), ct);
+        return Ok(ApiResponse<object>.Ok(new { count }, "Unliked."));
     }
 }
 
