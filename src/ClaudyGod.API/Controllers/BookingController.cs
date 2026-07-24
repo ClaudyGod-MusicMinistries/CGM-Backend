@@ -13,13 +13,13 @@ namespace ClaudyGod.API.Controllers;
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/bookings")]
-[PublicEndpoint]
 public class BookingController : ControllerBase
 {
     private readonly IMediator _mediator;
 
     public BookingController(IMediator mediator) => _mediator = mediator;
 
+    [PublicEndpoint]
     [HttpPost]
     public async Task<ActionResult<ApiResponse<object>>> Create(
         [FromBody] CreateBookingRequest dto, CancellationToken ct)
@@ -43,5 +43,12 @@ public class BookingController : ControllerBase
     {
         await _mediator.Send(new UpdateBookingStatusCommand(id, dto.Status, dto.AdminNotes), ct);
         return Ok(ApiResponse.Ok("Booking status updated."));
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<ActionResult<ApiResponse>> Delete(Guid id, CancellationToken ct)
+    {
+        await _mediator.Send(new DeleteBookingCommand(id), ct);
+        return Ok(ApiResponse.Ok("Booking moved to trash."));
     }
 }

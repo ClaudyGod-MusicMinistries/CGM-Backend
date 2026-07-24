@@ -113,7 +113,7 @@ public class BlogController : ControllerBase
         return CreatedAtAction(nameof(GetTags), ApiResponse<object>.Ok(new { id }, "Tag created."));
     }
 
-    // ── Comments & likes ─────────────────────────────────────────────────────
+    // ── Comments ──────────────────────────────────────────────────────────────
     // Post-scoped, public, anonymous (no login exists on the website) — the
     // admin moderation actions (list all/approve/reject/delete) live on the
     // separate top-level CommentController since they aren't post-scoped.
@@ -138,30 +138,62 @@ public class BlogController : ControllerBase
             "Comment submitted — it will appear once approved."));
     }
 
-    [HttpGet("{id:guid}/likes")]
-    public async Task<ActionResult<ApiResponse<LikeStatusDto>>> GetLikeStatus(
+    // ── Reactions ─────────────────────────────────────────────────────────────
+    // Post-level here (post-scoped, same convention as comments above);
+    // comment-level reactions sit under the literal "comments" segment below
+    // — a different route shape from {id:guid}/comments above, so there's no
+    // precedence conflict, same as the categories/tags pattern.
+
+    [HttpGet("{id:guid}/reactions")]
+    public async Task<ActionResult<ApiResponse<ReactionSummaryDto>>> GetPostReactions(
         Guid id, [FromQuery] string? visitorToken, CancellationToken ct)
     {
-        var result = await _mediator.Send(new GetLikeStatusQuery(id, visitorToken), ct);
-        return Ok(ApiResponse<LikeStatusDto>.Ok(result));
+        var result = await _mediator.Send(new GetReactionSummaryQuery(id, null, visitorToken), ct);
+        return Ok(ApiResponse<ReactionSummaryDto>.Ok(result));
     }
 
     [EnableRateLimiting("comments")]
-    [HttpPost("{id:guid}/like")]
-    public async Task<ActionResult<ApiResponse<object>>> Like(
-        Guid id, [FromBody] LikeRequest dto, CancellationToken ct)
+    [HttpPost("{id:guid}/reactions")]
+    public async Task<ActionResult<ApiResponse<ReactionSummaryDto>>> SetPostReaction(
+        Guid id, [FromBody] SetReactionRequest dto, CancellationToken ct)
     {
-        var count = await _mediator.Send(new LikePostCommand(id, dto.VisitorToken), ct);
-        return Ok(ApiResponse<object>.Ok(new { count }, "Liked."));
+        var result = await _mediator.Send(new SetReactionCommand(id, null, dto.VisitorToken, dto.Emoji), ct);
+        return Ok(ApiResponse<ReactionSummaryDto>.Ok(result));
     }
 
     [EnableRateLimiting("comments")]
-    [HttpDelete("{id:guid}/like")]
-    public async Task<ActionResult<ApiResponse<object>>> Unlike(
+    [HttpDelete("{id:guid}/reactions")]
+    public async Task<ActionResult<ApiResponse<ReactionSummaryDto>>> RemovePostReaction(
         Guid id, [FromQuery] string visitorToken, CancellationToken ct)
     {
-        var count = await _mediator.Send(new UnlikePostCommand(id, visitorToken), ct);
-        return Ok(ApiResponse<object>.Ok(new { count }, "Unliked."));
+        var result = await _mediator.Send(new RemoveReactionCommand(id, null, visitorToken), ct);
+        return Ok(ApiResponse<ReactionSummaryDto>.Ok(result));
+    }
+
+    [HttpGet("comments/{commentId:guid}/reactions")]
+    public async Task<ActionResult<ApiResponse<ReactionSummaryDto>>> GetCommentReactions(
+        Guid commentId, [FromQuery] string? visitorToken, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new GetReactionSummaryQuery(null, commentId, visitorToken), ct);
+        return Ok(ApiResponse<ReactionSummaryDto>.Ok(result));
+    }
+
+    [EnableRateLimiting("comments")]
+    [HttpPost("comments/{commentId:guid}/reactions")]
+    public async Task<ActionResult<ApiResponse<ReactionSummaryDto>>> SetCommentReaction(
+        Guid commentId, [FromBody] SetReactionRequest dto, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new SetReactionCommand(null, commentId, dto.VisitorToken, dto.Emoji), ct);
+        return Ok(ApiResponse<ReactionSummaryDto>.Ok(result));
+    }
+
+    [EnableRateLimiting("comments")]
+    [HttpDelete("comments/{commentId:guid}/reactions")]
+    public async Task<ActionResult<ApiResponse<ReactionSummaryDto>>> RemoveCommentReaction(
+        Guid commentId, [FromQuery] string visitorToken, CancellationToken ct)
+    {
+        var result = await _mediator.Send(new RemoveReactionCommand(null, commentId, visitorToken), ct);
+        return Ok(ApiResponse<ReactionSummaryDto>.Ok(result));
     }
 }
 

@@ -11,13 +11,13 @@ namespace ClaudyGod.API.Controllers;
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/contacts")]
-[PublicEndpoint]
 public class ContactController : ControllerBase
 {
     private readonly IMediator _mediator;
 
     public ContactController(IMediator mediator) => _mediator = mediator;
 
+    [PublicEndpoint]
     [HttpPost]
     public async Task<ActionResult<ApiResponse<object>>> Submit(
         [FromBody] SubmitContactRequest dto, CancellationToken ct)
@@ -33,6 +33,13 @@ public class ContactController : ControllerBase
     {
         var result = await _mediator.Send(new GetContactsQuery(page, pageSize, isRead), ct);
         return Ok(ApiResponse<PaginatedResult<ContactMessageDto>>.Ok(result));
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<ActionResult<ApiResponse>> Delete(Guid id, CancellationToken ct)
+    {
+        await _mediator.Send(new DeleteContactCommand(id), ct);
+        return Ok(ApiResponse.Ok("Message moved to trash."));
     }
 }
 

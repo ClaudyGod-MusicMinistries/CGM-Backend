@@ -41,4 +41,11 @@ public class SubscriberController : ControllerBase
         var result = await _mediator.Send(new GetSubscribersQuery(page, pageSize, isActive), ct);
         return Ok(ApiResponse<PaginatedResult<SubscriberDto>>.Ok(result));
     }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<ActionResult<ApiResponse>> Delete(Guid id, CancellationToken ct)
+    {
+        await _mediator.Send(new DeleteSubscriberCommand(id), ct);
+        return Ok(ApiResponse.Ok("Subscriber moved to trash."));
+    }
 }

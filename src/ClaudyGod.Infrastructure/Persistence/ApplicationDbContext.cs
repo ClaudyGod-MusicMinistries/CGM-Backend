@@ -40,7 +40,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<PaystackPayment> PaystackPayments => Set<PaystackPayment>();
     public DbSet<FAQ> FAQs => Set<FAQ>();
     public DbSet<Comment> Comments => Set<Comment>();
-    public DbSet<PostLike> PostLikes => Set<PostLike>();
+    public DbSet<Reaction> Reactions => Set<Reaction>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
