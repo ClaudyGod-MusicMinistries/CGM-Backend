@@ -1,5 +1,6 @@
 using ClaudyGod.Application.Common.Interfaces;
 using ClaudyGod.Application.Common.Models;
+using ClaudyGod.Application.Features.Trash;
 using ClaudyGod.Application.Features.Trash.DTOs;
 using ClaudyGod.Domain.Enums;
 using MediatR;
