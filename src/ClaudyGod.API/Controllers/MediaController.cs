@@ -42,13 +42,17 @@ public class MediaController : ControllerBase
         return Ok(ApiResponse<PaginatedResult<MediaItemDto>>.Ok(result));
     }
 
+    /// <summary>
+    /// Creates a MediaItem from an already-confirmed upload session — the file
+    /// bytes landed in S3 during StorageController's confirm step, not here.
+    /// See CreateMediaFromUploadCommand.
+    /// </summary>
     [HttpPost]
-    [RequestSizeLimit(500 * 1024 * 1024)]
-    public async Task<ActionResult<ApiResponse<object>>> Upload(
-        [FromForm] UploadMediaRequest dto, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<object>>> Create(
+        [FromBody] CreateMediaFromUploadRequest dto, CancellationToken ct)
     {
-        var id = await _mediator.Send(new UploadMediaCommand(dto), ct);
-        return Ok(ApiResponse<object>.Ok(new { id }, "Media uploaded successfully."));
+        var id = await _mediator.Send(new CreateMediaFromUploadCommand(dto), ct);
+        return Ok(ApiResponse<object>.Ok(new { id }, "Media created successfully."));
     }
 
     /// <summary>

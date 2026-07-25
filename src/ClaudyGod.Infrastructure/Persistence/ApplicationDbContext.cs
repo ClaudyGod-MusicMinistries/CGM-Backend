@@ -41,6 +41,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<FAQ> FAQs => Set<FAQ>();
     public DbSet<Comment> Comments => Set<Comment>();
     public DbSet<Reaction> Reactions => Set<Reaction>();
+    public DbSet<UploadSession> UploadSessions => Set<UploadSession>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -65,6 +66,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
         modelBuilder.Entity<FAQ>().HasQueryFilter(e => !e.IsDeleted && e.IsPublished);
         modelBuilder.Entity<Album>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Comment>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<UploadSession>().HasQueryFilter(e => !e.IsDeleted);
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

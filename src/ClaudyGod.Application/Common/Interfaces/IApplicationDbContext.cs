@@ -31,6 +31,7 @@ public interface IApplicationDbContext
     DbSet<FAQ> FAQs { get; }
     DbSet<Comment> Comments { get; }
     DbSet<Reaction> Reactions { get; }
+    DbSet<UploadSession> UploadSessions { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

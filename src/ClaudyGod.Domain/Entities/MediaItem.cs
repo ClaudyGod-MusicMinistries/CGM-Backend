@@ -14,7 +14,7 @@ public class MediaItem : AuditableEntity
     /// <summary>
     /// Set only for link-created items (see <see cref="CreateLink"/>) — an
     /// externally-hosted video (YouTube, etc.) with nothing stored via
-    /// IFileStorageService. Null for real uploaded files, which use
+    /// IWebsiteStorageService. Null for real uploaded files, which use
     /// <see cref="FilePath"/> instead.
     /// </summary>
     public string? ExternalUrl { get; private set; }
@@ -47,7 +47,7 @@ public class MediaItem : AuditableEntity
     /// <summary>
     /// Registers externally-hosted media (a YouTube link, etc.) with no file
     /// upload — distinct from <see cref="Create"/>, which always stores a
-    /// real file via IFileStorageService. FilePath/FileName/ContentType stay
+    /// real file via IWebsiteStorageService. FilePath/FileName/ContentType stay
     /// empty and FileSizeBytes stays 0 since they don't apply to a link.
     /// </summary>
     public static MediaItem CreateLink(string title, MediaType type, string externalUrl,

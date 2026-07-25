@@ -39,6 +39,8 @@ public class CreateEventCommandHandler : IRequestHandler<CreateEventCommand, Gui
         var ev = Event.Create(r.Title, r.StartDate, r.TotalCapacity, r.Description,
             r.Venue, location, r.EndDate, r.IsFree, r.TicketPrice);
 
+        if (!string.IsNullOrWhiteSpace(r.FlyerImagePath)) ev.SetFlyer(r.FlyerImagePath);
+
         _db.Events.Add(ev);
         await _db.SaveChangesAsync(ct);
 

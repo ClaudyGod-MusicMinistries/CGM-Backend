@@ -1,5 +1,6 @@
 using ClaudyGod.Application.Common.Interfaces;
 using ClaudyGod.Domain.Entities;
+using ClaudyGod.Domain.Enums;
 using FluentValidation;
 using MediatR;
 using Microsoft.AspNetCore.Http;
@@ -29,9 +30,9 @@ public class ValidateNigerianTransferCommandValidator : AbstractValidator<Valida
 public class ValidateNigerianTransferCommandHandler : IRequestHandler<ValidateNigerianTransferCommand, Guid>
 {
     private readonly IApplicationDbContext _db;
-    private readonly IFileStorageService _storage;
+    private readonly IWebsiteStorageService _storage;
 
-    public ValidateNigerianTransferCommandHandler(IApplicationDbContext db, IFileStorageService storage)
+    public ValidateNigerianTransferCommandHandler(IApplicationDbContext db, IWebsiteStorageService storage)
     {
         _db = db;
         _storage = storage;
@@ -44,11 +45,15 @@ public class ValidateNigerianTransferCommandHandler : IRequestHandler<ValidateNi
 
         if (exists) throw new Domain.Exceptions.DuplicateResourceException("Transfer reference already recorded.");
 
-        var fileResult = await _storage.SaveAsync(request.SlipFile, "transfers/ngn",
-            [".pdf", ".jpg", ".jpeg", ".png"], 10 * 1024 * 1024, ct);
+        // Direct server-side write, not a presigned round-trip — the slip's bytes
+        // already arrived in this request via the multipart form, so there's no
+        // separate client-to-S3 step that needs a confirm/integrity check.
+        await using var stream = request.SlipFile.OpenReadStream();
+        var fileResult = await _storage.UploadServerSideAsync(stream, UploadAssetKind.Document,
+            request.SlipFile.FileName, request.SlipFile.ContentType, ct);
 
         var transfer = NigerianBankTransfer.Create(request.Reference, request.SenderName,
-            request.Amount, fileResult.RelativePath, fileResult.ContentType, request.Currency);
+            request.Amount, fileResult.Key, request.SlipFile.ContentType, request.Currency);
 
         _db.NigerianBankTransfers.Add(transfer);
         await _db.SaveChangesAsync(ct);

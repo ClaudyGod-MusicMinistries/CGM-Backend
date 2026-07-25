@@ -29,6 +29,12 @@
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="8.0.1" />
     <PackageReference Include="AspNetCore.HealthChecks.NpgSql" Version="8.0.1" />
     <PackageReference Include="AspNetCore.HealthChecks.Redis" Version="8.0.1" />
+    <!-- Website upload pipeline (WebsiteS3StorageService), against Supabase's S3-compatible
+         gateway — a dedicated bucket, distinct from the sibling mobile app's own S3 pipeline.
+         Needs a version with AmazonS3Config.RequestChecksumCalculation/ResponseChecksumValidation
+         (added ~3.7.400+) — if `dotnet restore`/`build` reports those properties missing, bump
+         this to the latest 3.7.x; see WebsiteS3StorageService.cs's doc comment for why they're set. -->
+    <PackageReference Include="AWSSDK.S3" Version="3.7.416.1" />
   </ItemGroup>
 
   <ItemGroup>

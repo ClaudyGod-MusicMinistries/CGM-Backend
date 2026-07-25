@@ -41,6 +41,8 @@ public class UpdateEventCommandHandler : IRequestHandler<UpdateEventCommand>
         ev.Update(r.Title, r.StartDate, r.TotalCapacity, r.Description,
             r.Venue, location, r.EndDate, r.IsFree, r.TicketPrice);
 
+        if (!string.IsNullOrWhiteSpace(r.FlyerImagePath)) ev.SetFlyer(r.FlyerImagePath);
+
         await _db.SaveChangesAsync(ct);
     }
 }
