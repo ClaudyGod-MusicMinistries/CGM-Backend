@@ -14,6 +14,7 @@ public class EventConfiguration : IEntityTypeConfiguration<Event>
         builder.Property(e => e.Venue).HasMaxLength(300);
         builder.Property(e => e.Status).HasConversion<string>().HasMaxLength(20);
         builder.Property(e => e.TicketPrice).HasPrecision(18, 2);
+        builder.Property(e => e.FlyerImagePath).HasMaxLength(1000);
         builder.Ignore(e => e.AvailableSeats);
 
         builder.OwnsOne(e => e.Location, l =>

@@ -13,7 +13,8 @@ public record CreateEventRequest(
     string? City = null,
     string? State = null,
     string? Country = null,
-    string? ZipCode = null);
+    string? ZipCode = null,
+    string? FlyerImagePath = null);
 
 public record EventDto(
     Guid Id,

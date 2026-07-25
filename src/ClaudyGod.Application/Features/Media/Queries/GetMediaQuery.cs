@@ -14,9 +14,9 @@ public record GetMediaQuery(int Page = 1, int PageSize = 20,
 public class GetMediaQueryHandler : IRequestHandler<GetMediaQuery, PaginatedResult<MediaItemDto>>
 {
     private readonly IApplicationDbContext _db;
-    private readonly IFileStorageService _storage;
+    private readonly IWebsiteStorageService _storage;
 
-    public GetMediaQueryHandler(IApplicationDbContext db, IFileStorageService storage)
+    public GetMediaQueryHandler(IApplicationDbContext db, IWebsiteStorageService storage)
     {
         _db = db;
         _storage = storage;
