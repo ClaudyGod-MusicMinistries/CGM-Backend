@@ -20,6 +20,7 @@ public class PaymentController : ControllerBase
     /// Which payment methods are currently active. Lets the frontend hide/disable a
     /// method proactively instead of letting a user submit into a dead end.
     /// </summary>
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpGet("status")]
     public async Task<ActionResult<ApiResponse<PaymentMethodsStatusDto>>> GetStatus(CancellationToken ct)
     {
@@ -27,6 +28,7 @@ public class PaymentController : ControllerBase
         return Ok(ApiResponse<PaymentMethodsStatusDto>.Ok(status));
     }
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpPost("zelle/validate")]
     public async Task<ActionResult<ApiResponse<object>>> ValidateZelle(
         [FromBody] ValidateZelleRequest dto, CancellationToken ct)
@@ -38,6 +40,7 @@ public class PaymentController : ControllerBase
         return Ok(ApiResponse<object>.Ok(new { id }, "Zelle payment recorded and pending verification."));
     }
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpPost("ngn-transfer/validate")]
     [RequestSizeLimit(10 * 1024 * 1024)]
     public async Task<ActionResult<ApiResponse<object>>> ValidateNigerianTransfer(
@@ -49,6 +52,7 @@ public class PaymentController : ControllerBase
         return Ok(ApiResponse<object>.Ok(new { id }, "Bank transfer recorded and pending validation."));
     }
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpPost("paystack/record")]
     public async Task<ActionResult<ApiResponse<object>>> RecordPaystackPayment(
         [FromBody] RecordPaystackPaymentRequest dto, CancellationToken ct)

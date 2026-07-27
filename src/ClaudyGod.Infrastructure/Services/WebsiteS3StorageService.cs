@@ -134,6 +134,19 @@ public class WebsiteS3StorageService : IWebsiteStorageService
                 "The file was not found in storage — the upload did not complete. Please try uploading again before confirming.");
         }
 
+        if (metadata.ContentLength != session.DeclaredFileSizeBytes)
+        {
+            await _s3.DeleteObjectAsync(new DeleteObjectRequest
+            {
+                BucketName = session.StorageBucket,
+                Key = session.StorageKey,
+            }, ct);
+            session.MarkFailed();
+            await _db.SaveChangesAsync(ct);
+            throw new ValidationException(
+                "The uploaded file size does not match the authorized upload. Please request a new upload session.");
+        }
+
         session.MarkUploaded(metadata.ContentLength);
         await _db.SaveChangesAsync(ct);
 
@@ -144,8 +157,18 @@ public class WebsiteS3StorageService : IWebsiteStorageService
             session.MimeType, metadata.ContentLength, session.CompletedAt ?? DateTime.UtcNow);
     }
 
-    public string GetPublicUrl(string key) =>
-        $"{_options.PublicBaseUrl.TrimEnd('/')}/storage/v1/object/public/{_options.Bucket}/{key.TrimStart('/')}";
+    public string GetPublicUrl(string key)
+    {
+        var baseUrl = _options.PublicBaseUrl.TrimEnd('/');
+        var objectPath = key.TrimStart('/');
+
+        // Support either a project origin or the complete public bucket URL.
+        // This avoids duplicating Supabase's /storage/v1/object/public path when
+        // operators configure the full URL shown in the Supabase dashboard.
+        return baseUrl.Contains("/storage/v1/object/public/", StringComparison.OrdinalIgnoreCase)
+            ? $"{baseUrl}/{objectPath}"
+            : $"{baseUrl}/storage/v1/object/public/{_options.Bucket}/{objectPath}";
+    }
 
     public async Task DeleteAsync(string key, CancellationToken ct = default)
     {

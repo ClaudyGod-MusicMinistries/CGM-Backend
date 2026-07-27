@@ -19,12 +19,12 @@ public class ExceptionMiddleware
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DictionaryKeyPolicy  = JsonNamingPolicy.CamelCase,
+        DictionaryKeyPolicy = JsonNamingPolicy.CamelCase,
     };
 
     public ExceptionMiddleware(RequestDelegate next, ILogger<ExceptionMiddleware> logger)
     {
-        _next   = next;
+        _next = next;
         _logger = logger;
     }
 
@@ -53,10 +53,10 @@ public class ExceptionMiddleware
 
         var problem = new ProblemDetails
         {
-            Type     = $"https://httpstatuses.io/{status}",
-            Title    = title,
-            Status   = status,
-            Detail   = detail,
+            Type = $"https://httpstatuses.io/{status}",
+            Title = title,
+            Status = status,
+            Detail = detail,
             Instance = context.Request.Path,
         };
 
@@ -67,54 +67,54 @@ public class ExceptionMiddleware
             problem.Extensions["errors"] = errors;
 
         context.Response.ContentType = "application/problem+json";
-        context.Response.StatusCode  = status;
+        context.Response.StatusCode = status;
 
         await context.Response.WriteAsync(JsonSerializer.Serialize(problem, JsonOptions));
     }
 
     private static (int status, string title, string detail, IDictionary<string, string[]>? errors)
         Classify(Exception ex) => ex switch
-    {
-        NotFoundException nfe =>
-            (StatusCodes.Status404NotFound,
-             "Resource Not Found",
-             nfe.Message, null),
+        {
+            NotFoundException nfe =>
+                (StatusCodes.Status404NotFound,
+                 "Resource Not Found",
+                 nfe.Message, null),
 
-        DuplicateResourceException dre =>
-            (StatusCodes.Status409Conflict,
-             "Conflict",
-             dre.Message, null),
+            DuplicateResourceException dre =>
+                (StatusCodes.Status409Conflict,
+                 "Conflict",
+                 dre.Message, null),
 
-        ValidationException ve =>
-            (StatusCodes.Status422UnprocessableEntity,
-             "Validation Failed",
-             "One or more validation errors occurred. See 'errors' for details.",
-             (IDictionary<string, string[]>)new Dictionary<string, string[]>(ve.Errors)),
+            ValidationException ve =>
+                (StatusCodes.Status422UnprocessableEntity,
+                 "Validation Failed",
+                 "One or more validation errors occurred. See 'errors' for details.",
+                 (IDictionary<string, string[]>)new Dictionary<string, string[]>(ve.Errors)),
 
-        Application.Common.Exceptions.ValidationException ave =>
-            (StatusCodes.Status422UnprocessableEntity,
-             "Validation Failed",
-             "One or more validation errors occurred. See 'errors' for details.",
-             ave.Errors),
+            Application.Common.Exceptions.ValidationException ave =>
+                (StatusCodes.Status422UnprocessableEntity,
+                 "Validation Failed",
+                 "One or more validation errors occurred. See 'errors' for details.",
+                 ave.Errors),
 
-        ServiceUnavailableException sue =>
-            (StatusCodes.Status503ServiceUnavailable,
-             "Service Unavailable",
-             sue.Message, null),
+            ServiceUnavailableException sue =>
+                (StatusCodes.Status503ServiceUnavailable,
+                 "Service Unavailable",
+                 sue.Message, null),
 
-        DomainException de =>
-            (StatusCodes.Status400BadRequest,
-             "Business Rule Violation",
-             de.Message, null),
+            DomainException de =>
+                (StatusCodes.Status400BadRequest,
+                 "Business Rule Violation",
+                 de.Message, null),
 
-        UnauthorizedAccessException =>
-            (StatusCodes.Status401Unauthorized,
-             "Unauthorized",
-             "Authentication is required to access this resource.", null),
+            UnauthorizedAccessException =>
+                (StatusCodes.Status401Unauthorized,
+                 "Unauthorized",
+                 "Authentication is required to access this resource.", null),
 
-        _ =>
-            (StatusCodes.Status500InternalServerError,
-             "Internal Server Error",
-             "An unexpected error occurred. Please try again later.", null),
-    };
+            _ =>
+                (StatusCodes.Status500InternalServerError,
+                 "Internal Server Error",
+                 "An unexpected error occurred. Please try again later.", null),
+        };
 }

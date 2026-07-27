@@ -18,6 +18,7 @@ public class MediaController : ControllerBase
 
     public MediaController(IMediator mediator) => _mediator = mediator;
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PaginatedResult<MediaItemDto>>>> GetAll(
         [FromQuery] int page = 1, [FromQuery] int pageSize = 20,

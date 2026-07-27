@@ -1,4 +1,6 @@
 using ClaudyGod.API.Attributes;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace ClaudyGod.API.Middleware;
 
@@ -62,7 +64,7 @@ public class ApiKeyMiddleware
 
             // Validate API key
             var validKeys = _config.GetSection("Security:ApiKeys").Get<string[]>() ?? Array.Empty<string>();
-            if (!validKeys.Contains(apiKey))
+            if (!validKeys.Any(key => FixedTimeEquals(key, apiKey)))
             {
                 _logger.LogWarning("Invalid API key attempt for endpoint: {Path}. Key: {KeyLast4}", path, apiKey.Length > 4 ? apiKey[^4..] : "****");
                 context.Response.StatusCode = StatusCodes.Status401Unauthorized;
@@ -82,5 +84,14 @@ public class ApiKeyMiddleware
         }
 
         await _next(context);
+    }
+
+    private static bool FixedTimeEquals(string configuredKey, string suppliedKey)
+    {
+        var configuredBytes = Encoding.UTF8.GetBytes(configuredKey);
+        var suppliedBytes = Encoding.UTF8.GetBytes(suppliedKey);
+
+        return configuredBytes.Length == suppliedBytes.Length &&
+               CryptographicOperations.FixedTimeEquals(configuredBytes, suppliedBytes);
     }
 }

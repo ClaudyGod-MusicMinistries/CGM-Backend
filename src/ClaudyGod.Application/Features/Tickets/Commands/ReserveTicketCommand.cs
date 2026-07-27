@@ -77,10 +77,12 @@ public class ReserveTicketCommandHandler : IRequestHandler<ReserveTicketCommand,
         {
             await _db.SaveChangesAsync(ct);
         }
-        catch (Microsoft.EntityFrameworkCore.DbUpdateException)
+        catch (DbUpdateConcurrencyException)
         {
-            // Re-read event to get accurate seat count — another request may have taken the last seats
-            var fresh = await _db.Events.FirstOrDefaultAsync(e => e.Id == r.EventId, ct);
+            // Re-read without the stale tracked entity: another transaction committed
+            // a reservation against the capacity version we originally loaded.
+            var fresh = await _db.Events.AsNoTracking()
+                .FirstOrDefaultAsync(e => e.Id == r.EventId, ct);
             throw new Domain.Exceptions.DomainException(
                 fresh is null || fresh.AvailableSeats <= 0
                     ? "This event just sold out — please try another event."

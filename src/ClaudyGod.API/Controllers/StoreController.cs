@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using ClaudyGod.API.Attributes;
 using ClaudyGod.Application.Common.Models;
 using ClaudyGod.Application.Features.Store.Commands;
 using ClaudyGod.Application.Features.Store.DTOs;
@@ -17,6 +18,7 @@ public class StoreController : ControllerBase
 
     public StoreController(IMediator mediator) => _mediator = mediator;
 
+    [PublicEndpoint]
     [HttpGet("products")]
     public async Task<ActionResult<ApiResponse<List<ProductDto>>>> GetProducts(
         [FromQuery] string? category, CancellationToken ct)
@@ -48,6 +50,7 @@ public class StoreController : ControllerBase
         return Ok(ApiResponse.Ok("Product deleted."));
     }
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpPost("checkout")]
     public async Task<ActionResult<ApiResponse<object>>> Checkout(
         [FromBody] CreateOrderRequest request, CancellationToken ct)

@@ -70,8 +70,8 @@ public class AIAIService : IAIService
 
     public AIAIService(HttpClient http, IConfiguration config, ILogger<AIAIService> logger)
     {
-        _http   = http;
-        _model  = config["AIProviderSettings:Model"] ?? config["AIProvider:Model"] ?? "ai-sonnet-4-6";
+        _http = http;
+        _model = config["AIProviderSettings:Model"] ?? config["AIProvider:Model"] ?? "ai-sonnet-4-6";
         _logger = logger;
 
         var key = config["AIProviderSettings:ApiKey"] ?? config["AIProvider:ApiKey"];
@@ -104,9 +104,9 @@ public class AIAIService : IAIService
 
         var payload = new
         {
-            model      = _model,
+            model = _model,
             max_tokens = 1024,
-            system     = SystemPrompts[persona],
+            system = SystemPrompts[persona],
             messages,
         };
 

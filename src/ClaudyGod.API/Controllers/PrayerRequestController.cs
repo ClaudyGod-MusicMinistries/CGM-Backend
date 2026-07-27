@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using ClaudyGod.API.Attributes;
 using ClaudyGod.Application.Common.Models;
 using ClaudyGod.Application.Features.PrayerRequests.Commands;
 using ClaudyGod.Application.Features.PrayerRequests.Queries;
@@ -17,6 +18,7 @@ public class PrayerRequestController : ControllerBase
 
     public PrayerRequestController(IMediator mediator) => _mediator = mediator;
 
+    [PublicEndpoint]
     [HttpPost]
     public async Task<ActionResult<ApiResponse<object>>> Submit(
         [FromBody] SubmitPrayerRequestDto dto, CancellationToken ct)

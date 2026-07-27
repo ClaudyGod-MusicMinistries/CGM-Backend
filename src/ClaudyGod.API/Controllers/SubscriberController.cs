@@ -1,4 +1,5 @@
 using Asp.Versioning;
+using ClaudyGod.API.Attributes;
 using ClaudyGod.Application.Common.Models;
 using ClaudyGod.Application.Features.Subscribers.Commands;
 using ClaudyGod.Application.Features.Subscribers.DTOs;
@@ -17,6 +18,7 @@ public class SubscriberController : ControllerBase
 
     public SubscriberController(IMediator mediator) => _mediator = mediator;
 
+    [PublicEndpoint]
     [HttpPost]
     public async Task<ActionResult<ApiResponse<object>>> Subscribe(
         [FromBody] SubscribeRequestDto dto, CancellationToken ct)
@@ -25,6 +27,7 @@ public class SubscriberController : ControllerBase
         return Ok(ApiResponse<object>.Ok(new { id }, "Successfully subscribed!"));
     }
 
+    [PublicEndpoint]
     [HttpDelete("unsubscribe")]
     public async Task<ActionResult<ApiResponse>> Unsubscribe(
         [FromQuery] string email, [FromQuery] string token, CancellationToken ct)

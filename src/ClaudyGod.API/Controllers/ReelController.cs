@@ -20,6 +20,7 @@ public class ReelController : ControllerBase
     /// Returns published reels (YouTube videos), optionally filtered by category.
     /// Categories: featured, sermon, teaching, music_video, live, christmas
     /// </summary>
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<ReelDto>>>> GetAll(
         [FromQuery] string? category,
