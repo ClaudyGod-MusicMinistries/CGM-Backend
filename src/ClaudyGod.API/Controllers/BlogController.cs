@@ -22,6 +22,7 @@ public class BlogController : ControllerBase
 
     public BlogController(IMediator mediator) => _mediator = mediator;
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PaginatedResult<BlogPostDto>>>> GetAll(
         [FromQuery] int page = 1, [FromQuery] int pageSize = 10,
@@ -34,6 +35,7 @@ public class BlogController : ControllerBase
         return Ok(ApiResponse<PaginatedResult<BlogPostDto>>.Ok(result));
     }
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpGet("{slug}")]
     public async Task<ActionResult<ApiResponse<BlogPostDetailDto>>> GetBySlug(
         string slug, CancellationToken ct)
@@ -83,6 +85,7 @@ public class BlogController : ControllerBase
     // parameterized {slug} route above — standard ASP.NET routing precedence,
     // no ambiguity with GetBySlug.
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpGet("categories")]
     public async Task<ActionResult<ApiResponse<List<BlogCategoryDto>>>> GetCategories(CancellationToken ct)
     {
@@ -98,6 +101,7 @@ public class BlogController : ControllerBase
         return CreatedAtAction(nameof(GetCategories), ApiResponse<object>.Ok(new { id }, "Category created."));
     }
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpGet("tags")]
     public async Task<ActionResult<ApiResponse<List<BlogTagDto>>>> GetTags(CancellationToken ct)
     {
@@ -118,6 +122,7 @@ public class BlogController : ControllerBase
     // admin moderation actions (list all/approve/reject/delete) live on the
     // separate top-level CommentController since they aren't post-scoped.
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpGet("{id:guid}/comments")]
     public async Task<ActionResult<ApiResponse<List<CommentDto>>>> GetComments(
         Guid id, CancellationToken ct)
@@ -126,6 +131,7 @@ public class BlogController : ControllerBase
         return Ok(ApiResponse<List<CommentDto>>.Ok(result));
     }
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [EnableRateLimiting("comments")]
     [HttpPost("{id:guid}/comments")]
     public async Task<ActionResult<ApiResponse<object>>> CreateComment(
@@ -144,6 +150,7 @@ public class BlogController : ControllerBase
     // — a different route shape from {id:guid}/comments above, so there's no
     // precedence conflict, same as the categories/tags pattern.
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpGet("{id:guid}/reactions")]
     public async Task<ActionResult<ApiResponse<ReactionSummaryDto>>> GetPostReactions(
         Guid id, [FromQuery] string? visitorToken, CancellationToken ct)
@@ -152,6 +159,7 @@ public class BlogController : ControllerBase
         return Ok(ApiResponse<ReactionSummaryDto>.Ok(result));
     }
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [EnableRateLimiting("comments")]
     [HttpPost("{id:guid}/reactions")]
     public async Task<ActionResult<ApiResponse<ReactionSummaryDto>>> SetPostReaction(
@@ -161,6 +169,7 @@ public class BlogController : ControllerBase
         return Ok(ApiResponse<ReactionSummaryDto>.Ok(result));
     }
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [EnableRateLimiting("comments")]
     [HttpDelete("{id:guid}/reactions")]
     public async Task<ActionResult<ApiResponse<ReactionSummaryDto>>> RemovePostReaction(
@@ -170,6 +179,7 @@ public class BlogController : ControllerBase
         return Ok(ApiResponse<ReactionSummaryDto>.Ok(result));
     }
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpGet("comments/{commentId:guid}/reactions")]
     public async Task<ActionResult<ApiResponse<ReactionSummaryDto>>> GetCommentReactions(
         Guid commentId, [FromQuery] string? visitorToken, CancellationToken ct)
@@ -178,6 +188,7 @@ public class BlogController : ControllerBase
         return Ok(ApiResponse<ReactionSummaryDto>.Ok(result));
     }
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [EnableRateLimiting("comments")]
     [HttpPost("comments/{commentId:guid}/reactions")]
     public async Task<ActionResult<ApiResponse<ReactionSummaryDto>>> SetCommentReaction(
@@ -187,6 +198,7 @@ public class BlogController : ControllerBase
         return Ok(ApiResponse<ReactionSummaryDto>.Ok(result));
     }
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [EnableRateLimiting("comments")]
     [HttpDelete("comments/{commentId:guid}/reactions")]
     public async Task<ActionResult<ApiResponse<ReactionSummaryDto>>> RemoveCommentReaction(

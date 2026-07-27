@@ -1,12 +1,11 @@
 namespace ClaudyGod.API.Attributes;
 
 /// <summary>
-/// Marks a controller or action as not requiring the x-api-key header, checked by
-/// ApiKeyMiddleware via endpoint metadata. Prefer applying this next to the route it
-/// describes rather than maintaining a separate path list, so a new public route can't
-/// be silently left unprotected (or a protected one silently left open) by omission.
+/// Explicitly marks an endpoint as public: it bypasses both the API-key gate and
+/// ASP.NET authorization. Endpoints which are anonymous but still require a
+/// server-to-server API key should use [AllowAnonymous] instead.
 /// </summary>
 [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, AllowMultiple = false)]
-public sealed class PublicEndpointAttribute : Attribute
+public sealed class PublicEndpointAttribute : Attribute, Microsoft.AspNetCore.Authorization.IAllowAnonymous
 {
 }

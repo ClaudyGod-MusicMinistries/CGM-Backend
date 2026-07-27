@@ -58,6 +58,7 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, AuthResul
 
         await _db.SaveChangesAsync(ct);
 
-        return new AuthResult(accessToken, refreshToken.Token, refreshToken.ExpiresAt, user.Role.ToString());
+        return new AuthResult(accessToken.Token, accessToken.ExpiresAt,
+            refreshToken.Token, refreshToken.ExpiresAt, user.Role.ToString());
     }
 }

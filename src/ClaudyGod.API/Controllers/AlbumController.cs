@@ -20,6 +20,7 @@ public class AlbumController : ControllerBase
     /// <summary>
     /// Returns all published music albums with streaming platform links.
     /// </summary>
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpGet]
     public async Task<ActionResult<ApiResponse<List<AlbumDto>>>> GetAll(CancellationToken ct)
     {

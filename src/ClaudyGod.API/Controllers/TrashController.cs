@@ -44,7 +44,7 @@ public class TrashController : ControllerBase
     }
 
     [HttpDelete]
-    public async Task<ActionResult<ApiResponse>> Empty(CancellationToken ct)
+    public async Task<ActionResult<ApiResponse>> EmptyTrash(CancellationToken ct)
     {
         await _mediator.Send(new EmptyTrashCommand(), ct);
         return Ok(ApiResponse.Ok("Trash emptied."));

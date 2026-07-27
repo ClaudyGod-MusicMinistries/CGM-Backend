@@ -6,7 +6,9 @@ using ClaudyGod.Infrastructure;
 using ClaudyGod.Infrastructure.Persistence;
 using ClaudyGod.API.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -53,6 +55,14 @@ try
     }
 
     var builder = WebApplication.CreateBuilder(args);
+
+    var configuredApiKeys = builder.Configuration.GetSection("Security:ApiKeys").Get<string[]>()
+        ?.Where(key => !string.IsNullOrWhiteSpace(key))
+        .ToArray() ?? [];
+    if (builder.Environment.IsProduction() && configuredApiKeys.Length == 0)
+        throw new InvalidOperationException("At least one Security:ApiKeys entry is required in production.");
+    if (configuredApiKeys.Any(key => Encoding.UTF8.GetByteCount(key) < 32))
+        throw new InvalidOperationException("Every Security:ApiKeys entry must be at least 32 bytes.");
 
     // Serilog
     builder.Host.UseSerilog((ctx, lc) => lc
@@ -192,7 +202,32 @@ try
             };
         });
 
-    builder.Services.AddAuthorization();
+    builder.Services.AddAuthorization(options =>
+    {
+        // Secure-by-default: any endpoint not explicitly marked [AllowAnonymous]
+        // is an administrative endpoint and requires an authenticated admin role.
+        options.FallbackPolicy = new AuthorizationPolicyBuilder()
+            .RequireAuthenticatedUser()
+            .RequireRole("Admin", "SuperAdmin")
+            .Build();
+    });
+
+    // Forwarded headers are accepted only from explicitly trusted proxies.
+    // Without this allow-list, client-supplied X-Forwarded-For values are ignored.
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        options.ForwardLimit = 1;
+        options.KnownNetworks.Clear();
+        options.KnownProxies.Clear();
+
+        foreach (var value in builder.Configuration.GetSection("ReverseProxy:KnownProxies").Get<string[]>() ?? [])
+        {
+            if (!System.Net.IPAddress.TryParse(value, out var address))
+                throw new InvalidOperationException($"ReverseProxy:KnownProxies contains invalid IP address '{value}'.");
+            options.KnownProxies.Add(address);
+        }
+    });
 
     // Redis distributed cache
     var redisConn = builder.Configuration["Redis:ConnectionString"] ?? "localhost:6379";
@@ -203,14 +238,13 @@ try
         options.InstanceName = redisInstance;
     });
 
-    // Health checks — both DB and Redis are Degraded (not Unhealthy) so that
-    // /healthz always returns HTTP 200. Traefik uses this endpoint to decide
-    // whether to route traffic; Unhealthy → 503 → Traefik returns 502 to users.
+    // PostgreSQL is required for readiness; Redis is an optional cache and may
+    // degrade without removing an otherwise functional instance from service.
     builder.Services.AddHealthChecks()
         .AddNpgSql(
             builder.Configuration.GetConnectionString("DefaultConnection")!,
             name: "database",
-            failureStatus: HealthStatus.Degraded,
+            failureStatus: HealthStatus.Unhealthy,
             tags: ["db"])
         .AddRedis(
             redisConn,
@@ -222,14 +256,15 @@ try
     var permitLimit = builder.Configuration.GetValue<int>("RateLimit:PermitLimit", 100);
     var windowSeconds = builder.Configuration.GetValue<int>("RateLimit:WindowSeconds", 60);
 
+    static string ClientKey(HttpContext context) =>
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
     builder.Services.AddRateLimiter(options =>
     {
         // Global per-IP limiter
         options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
         {
-            var ip = ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
-                     ?? ctx.Connection.RemoteIpAddress?.ToString()
-                     ?? "unknown";
+            var ip = ClientKey(ctx);
             return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = permitLimit,
@@ -242,9 +277,7 @@ try
         // Strict limiter for AI endpoints — 10 requests/minute per IP
         options.AddPolicy("ai", ctx =>
         {
-            var ip = ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
-                     ?? ctx.Connection.RemoteIpAddress?.ToString()
-                     ?? "unknown";
+            var ip = ClientKey(ctx);
             return RateLimitPartition.GetFixedWindowLimiter($"ai:{ip}", _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 10,
@@ -257,9 +290,7 @@ try
         // Strict limiter for auth endpoints — 10 attempts/5 minutes per IP
         options.AddPolicy("auth", ctx =>
         {
-            var ip = ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
-                     ?? ctx.Connection.RemoteIpAddress?.ToString()
-                     ?? "unknown";
+            var ip = ClientKey(ctx);
             return RateLimitPartition.GetFixedWindowLimiter($"auth:{ip}", _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 10,
@@ -275,9 +306,7 @@ try
         // enough to blunt a scripted burst.
         options.AddPolicy("comments", ctx =>
         {
-            var ip = ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
-                     ?? ctx.Connection.RemoteIpAddress?.ToString()
-                     ?? "unknown";
+            var ip = ClientKey(ctx);
             return RateLimitPartition.GetFixedWindowLimiter($"comments:{ip}", _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 8,
@@ -308,6 +337,10 @@ try
     builder.Services.AddProblemDetails();
 
     var app = builder.Build();
+
+    // Must run before anything reads scheme or client IP. Only configured
+    // KnownProxies are trusted by ForwardedHeadersOptions above.
+    app.UseForwardedHeaders();
 
     // Correlation ID must be first so every subsequent middleware and log has the ID
     app.UseMiddleware<CorrelationIdMiddleware>();
@@ -353,35 +386,56 @@ try
 
     app.MapControllers();
 
-    // Health check endpoint
+    static async Task WriteHealthResponse(HttpContext context, HealthReport report)
+    {
+        context.Response.ContentType = "application/json";
+        var result = JsonSerializer.Serialize(new
+        {
+            status = report.Status.ToString().ToLowerInvariant(),
+            timestamp = DateTime.UtcNow,
+            checks = report.Entries.Select(e => new
+            {
+                name = e.Key,
+                status = e.Value.Status.ToString().ToLowerInvariant(),
+                duration = e.Value.Duration.TotalMilliseconds
+            })
+        });
+        await context.Response.WriteAsync(result);
+    }
+
+    // Liveness answers only whether the process can serve HTTP. Readiness
+    // includes dependencies and returns 503 when PostgreSQL is unavailable.
+    app.MapHealthChecks("/health/live", new HealthCheckOptions
+    {
+        Predicate = _ => false,
+        ResponseWriter = WriteHealthResponse,
+    }).AllowAnonymous();
+    app.MapHealthChecks("/health/ready", new HealthCheckOptions
+    {
+        ResponseWriter = WriteHealthResponse,
+    }).AllowAnonymous();
     app.MapHealthChecks("/healthz", new HealthCheckOptions
     {
-        ResponseWriter = async (context, report) =>
-        {
-            context.Response.ContentType = "application/json";
-            var result = JsonSerializer.Serialize(new
-            {
-                status = report.Status.ToString().ToLower(),
-                timestamp = DateTime.UtcNow,
-                checks = report.Entries.Select(e => new
-                {
-                    name = e.Key,
-                    status = e.Value.Status.ToString().ToLower(),
-                    duration = e.Value.Duration.TotalMilliseconds
-                })
-            });
-            await context.Response.WriteAsync(result);
-        }
-    });
+        ResponseWriter = WriteHealthResponse,
+    }).AllowAnonymous();
 
     Log.Information("ClaudyGod API starting...");
     await app.RunAsync();
 }
+catch (HostAbortedException)
+{
+    // Expected control flow used by EF tooling and WebApplicationFactory while
+    // resolving the application's service provider. It must not be swallowed.
+    throw;
+}
 catch (Exception ex)
 {
     Log.Fatal(ex, "Application terminated unexpectedly");
+    throw;
 }
 finally
 {
     Log.CloseAndFlush();
 }
+
+public partial class Program;

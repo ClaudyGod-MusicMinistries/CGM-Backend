@@ -32,7 +32,7 @@ public class JwtService : IJwtService
         _refreshTokenExpiryDays = int.TryParse(config["Jwt:RefreshTokenExpiryDays"], out var d) ? d : 7;
     }
 
-    public string GenerateAccessToken(User user)
+    public AccessTokenResult GenerateAccessToken(User user)
     {
         var claims = new[]
         {
@@ -46,14 +46,15 @@ public class JwtService : IJwtService
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_key));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
+        var expiresAt = DateTime.UtcNow.AddMinutes(_accessTokenExpiryMinutes);
         var token = new JwtSecurityToken(
             issuer: _issuer,
             audience: _audience,
             claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(_accessTokenExpiryMinutes),
+            expires: expiresAt,
             signingCredentials: creds);
 
-        return new JwtSecurityTokenHandler().WriteToken(token);
+        return new AccessTokenResult(new JwtSecurityTokenHandler().WriteToken(token), expiresAt);
     }
 
     public RefreshToken GenerateRefreshToken(string? ipAddress)

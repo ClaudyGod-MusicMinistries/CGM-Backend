@@ -18,6 +18,7 @@ public class EventController : ControllerBase
 
     public EventController(IMediator mediator) => _mediator = mediator;
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PaginatedResult<EventDto>>>> GetAll(
         [FromQuery] int page = 1, [FromQuery] int pageSize = 10,
@@ -27,6 +28,7 @@ public class EventController : ControllerBase
         return Ok(ApiResponse<PaginatedResult<EventDto>>.Ok(result));
     }
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ApiResponse<EventDetailDto>>> GetById(Guid id, CancellationToken ct)
     {

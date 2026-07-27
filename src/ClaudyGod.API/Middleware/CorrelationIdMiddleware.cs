@@ -10,6 +10,7 @@ namespace ClaudyGod.API.Middleware;
 public class CorrelationIdMiddleware
 {
     public const string HeaderName = "X-Correlation-Id";
+    private const int MaxCorrelationIdLength = 64;
 
     private readonly RequestDelegate _next;
 
@@ -17,8 +18,10 @@ public class CorrelationIdMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        var correlationId = context.Request.Headers[HeaderName].FirstOrDefault()
-                            ?? Guid.NewGuid().ToString("N")[..16];
+        var suppliedId = context.Request.Headers[HeaderName].FirstOrDefault();
+        var correlationId = IsValid(suppliedId)
+            ? suppliedId!
+            : Guid.NewGuid().ToString("N")[..16];
 
         context.Items[HeaderName] = correlationId;
         context.Response.OnStarting(() =>
@@ -32,4 +35,9 @@ public class CorrelationIdMiddleware
             await _next(context);
         }
     }
+
+    private static bool IsValid(string? value) =>
+        !string.IsNullOrWhiteSpace(value) &&
+        value.Length <= MaxCorrelationIdLength &&
+        value.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.');
 }

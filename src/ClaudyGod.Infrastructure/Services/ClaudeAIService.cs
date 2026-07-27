@@ -70,8 +70,8 @@ public class ClaudeAIService : IAIService
 
     public ClaudeAIService(HttpClient http, IConfiguration config, ILogger<ClaudeAIService> logger)
     {
-        _http   = http;
-        _model  = config["AnthropicSettings:Model"] ?? config["Anthropic:Model"] ?? "claude-sonnet-4-6";
+        _http = http;
+        _model = config["AnthropicSettings:Model"] ?? config["Anthropic:Model"] ?? "claude-sonnet-4-6";
         _logger = logger;
 
         var key = config["AnthropicSettings:ApiKey"] ?? config["Anthropic:ApiKey"];
@@ -104,9 +104,9 @@ public class ClaudeAIService : IAIService
 
         var payload = new
         {
-            model      = _model,
+            model = _model,
             max_tokens = 1024,
-            system     = SystemPrompts[persona],
+            system = SystemPrompts[persona],
             messages,
         };
 

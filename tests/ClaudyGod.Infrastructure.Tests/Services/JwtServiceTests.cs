@@ -47,7 +47,7 @@ public class JwtServiceTests
         var service = NewService();
         var token = service.GenerateAccessToken(TestUser());
 
-        var principal = service.ValidateToken(token);
+        var principal = service.ValidateToken(token.Token);
 
         principal.Should().NotBeNull();
         principal!.Identity!.IsAuthenticated.Should().BeTrue();
@@ -58,7 +58,7 @@ public class JwtServiceTests
     {
         var service = NewService();
         var token = service.GenerateAccessToken(TestUser());
-        var tampered = token[..^2] + (token[^2] == 'A' ? "B" : "A") + token[^1];
+        var tampered = token.Token[..^2] + (token.Token[^2] == 'A' ? "B" : "A") + token.Token[^1];
 
         service.ValidateToken(tampered).Should().BeNull();
     }
@@ -71,7 +71,7 @@ public class JwtServiceTests
 
         var token = issuer.GenerateAccessToken(TestUser());
 
-        verifier.ValidateToken(token).Should().BeNull();
+        verifier.ValidateToken(token.Token).Should().BeNull();
     }
 
     [Fact]
