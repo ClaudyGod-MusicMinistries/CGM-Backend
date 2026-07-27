@@ -9,7 +9,7 @@ public class RefreshTokenConfiguration : IEntityTypeConfiguration<RefreshToken>
     public void Configure(EntityTypeBuilder<RefreshToken> builder)
     {
         builder.HasKey(r => r.Id);
-        builder.Property(r => r.Token).HasMaxLength(200).IsRequired();
+        builder.Property(r => r.TokenHash).HasMaxLength(64).IsRequired();
         builder.Property(r => r.CreatedByIp).HasMaxLength(50);
         builder.Property(r => r.RevokedByIp).HasMaxLength(50);
 
@@ -20,7 +20,7 @@ public class RefreshTokenConfiguration : IEntityTypeConfiguration<RefreshToken>
                .HasForeignKey(r => r.UserId)
                .OnDelete(DeleteBehavior.Cascade);
 
-        builder.HasIndex(r => r.Token).IsUnique();
+        builder.HasIndex(r => r.TokenHash).IsUnique();
         builder.HasIndex(r => r.UserId);
         builder.HasIndex(r => new { r.UserId, r.IsRevoked, r.ExpiresAt });
     }

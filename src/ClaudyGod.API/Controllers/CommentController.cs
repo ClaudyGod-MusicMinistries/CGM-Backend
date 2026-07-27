@@ -36,8 +36,11 @@ public class CommentController : ControllerBase
         Guid id, [FromBody] UpdateCommentStatusRequest dto, CancellationToken ct)
     {
         if (!Enum.TryParse<CommentStatus>(dto.Status, ignoreCase: true, out var parsed))
-            return BadRequest(ApiResponse.Fail(
-                $"Invalid comment status '{dto.Status}'. Valid values: {string.Join(", ", Enum.GetNames<CommentStatus>())}"));
+            throw new ClaudyGod.Domain.Exceptions.ValidationException(
+                new Dictionary<string, string[]>
+                {
+                    ["status"] = [$"Status must be one of: {string.Join(", ", Enum.GetNames<CommentStatus>())}."]
+                });
 
         await _mediator.Send(new UpdateCommentStatusCommand(id, parsed), ct);
         return Ok(ApiResponse.Ok("Comment status updated."));

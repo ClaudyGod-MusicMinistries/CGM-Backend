@@ -57,20 +57,26 @@ public class JwtService : IJwtService
         return new AccessTokenResult(new JwtSecurityTokenHandler().WriteToken(token), expiresAt);
     }
 
-    public RefreshToken GenerateRefreshToken(string? ipAddress)
+    public RefreshTokenResult GenerateRefreshToken(string? ipAddress)
     {
         var randomBytes = new byte[64];
         using var rng = RandomNumberGenerator.Create();
         rng.GetBytes(randomBytes);
 
-        return new RefreshToken
+        var plainTextToken = Convert.ToBase64String(randomBytes);
+        var entity = new RefreshToken
         {
-            Token = Convert.ToBase64String(randomBytes),
+            TokenHash = HashRefreshToken(plainTextToken),
             ExpiresAt = DateTime.UtcNow.AddDays(_refreshTokenExpiryDays),
             CreatedAt = DateTime.UtcNow,
             CreatedByIp = ipAddress
         };
+
+        return new RefreshTokenResult(plainTextToken, entity);
     }
+
+    public string HashRefreshToken(string token) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
 
     public ClaimsPrincipal? ValidateToken(string token)
     {

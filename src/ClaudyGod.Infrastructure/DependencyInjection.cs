@@ -38,7 +38,7 @@ public static class DependencyInjection
         var storageOptions = configuration.GetSection(WebsiteStorageOptions.SectionName).Get<WebsiteStorageOptions>()
             ?? new WebsiteStorageOptions();
         var missingKeys = storageOptions.MissingKeys().ToList();
-        if (missingKeys.Count > 0)
+        if (!EF.IsDesignTime && missingKeys.Count > 0)
             throw new InvalidOperationException(
                 $"Website storage is not configured — missing: {string.Join(", ", missingKeys)}. " +
                 "Set these via the Storage__Website__* environment variables before starting the app.");

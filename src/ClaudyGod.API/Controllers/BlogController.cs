@@ -73,8 +73,11 @@ public class BlogController : ControllerBase
         Guid id, [FromBody] UpdateBlogPostStatusRequest dto, CancellationToken ct)
     {
         if (!Enum.TryParse<BlogPostStatus>(dto.Status, ignoreCase: true, out var parsed))
-            return BadRequest(ApiResponse.Fail(
-                $"Invalid blog post status '{dto.Status}'. Valid values: {string.Join(", ", Enum.GetNames<BlogPostStatus>())}"));
+            throw new ClaudyGod.Domain.Exceptions.ValidationException(
+                new Dictionary<string, string[]>
+                {
+                    ["status"] = [$"Status must be one of: {string.Join(", ", Enum.GetNames<BlogPostStatus>())}."]
+                });
 
         await _mediator.Send(new UpdateBlogPostStatusCommand(id, parsed), ct);
         return Ok(ApiResponse.Ok("Blog post status updated."));

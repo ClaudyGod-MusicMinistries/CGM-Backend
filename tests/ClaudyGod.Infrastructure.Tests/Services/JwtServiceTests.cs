@@ -80,4 +80,26 @@ public class JwtServiceTests
         var service = NewService();
         service.ValidateToken("not-a-jwt-at-all").Should().BeNull();
     }
+
+    [Fact]
+    public void GenerateRefreshToken_StoresOnlyHashAndReturnsSeparateBearerToken()
+    {
+        var service = NewService();
+
+        var result = service.GenerateRefreshToken("127.0.0.1");
+
+        result.PlainTextToken.Should().NotBeNullOrWhiteSpace();
+        result.Entity.TokenHash.Should().Be(service.HashRefreshToken(result.PlainTextToken));
+        result.Entity.TokenHash.Should().NotBe(result.PlainTextToken);
+        result.Entity.TokenHash.Should().HaveLength(64);
+    }
+
+    [Fact]
+    public void HashRefreshToken_IsDeterministicAndTokenSpecific()
+    {
+        var service = NewService();
+
+        service.HashRefreshToken("token-a").Should().Be(service.HashRefreshToken("token-a"));
+        service.HashRefreshToken("token-a").Should().NotBe(service.HashRefreshToken("token-b"));
+    }
 }

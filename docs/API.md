@@ -69,9 +69,15 @@ Three policies (`Program.cs`), per-IP, fixed window:
 
 Exceeding a limit returns `429` with a `Retry-After` header.
 
-### API key gate — the single most important thing to know
+### Authorization model — secure by default
 
-Every request also passes through `ApiKeyMiddleware`, which requires an `x-api-key` header **unless** the target controller is marked `[PublicEndpoint]`. This is a coarse, non-cryptographic bot/abuse gate — it is **not** the same as `[Authorize]`; a controller can be `[PublicEndpoint]` (no API key needed) while still requiring a JWT bearer token on specific actions (e.g. `AuthController`'s `GET /me`).
+Authorization uses three explicit endpoint classes:
+
+- `[PublicEndpoint]`: anonymous and does not require an API key. This marker implements ASP.NET's anonymous-endpoint contract as well as bypassing `ApiKeyMiddleware`.
+- `[AllowAnonymous]`: does not require a JWT, but still requires `x-api-key`. This is used for traffic that must pass through the trusted website backend/proxy.
+- No anonymous marker: the global fallback policy requires an `Admin` or `SuperAdmin` JWT, and `ApiKeyMiddleware` independently requires a valid server-to-server key. Administrative routes therefore require both controls.
+
+Audit identity is derived only from validated JWT claims. Caller-supplied `x-actor-id` and `x-actor-email` headers are never trusted.
 
 | Controller | Requires `x-api-key`? |
 |---|---|
@@ -83,13 +89,11 @@ If you're integrating a new client against this API and reads are coming back `4
 
 ---
 
-## 3. Response shapes
-
-You will see **two different JSON shapes** depending on how the request failed. A client must handle both.
+## 3. Response contracts
 
 ### `ApiResponse<T>` — normal success/failure path
 
-Used for ordinary success responses and for validation failures raised inside a MediatR pipeline via `ValidationBehaviour`.
+Used for successful application responses.
 
 ```json
 {
@@ -101,11 +105,9 @@ Used for ordinary success responses and for validation failures raised inside a 
 }
 ```
 
-On failure, `success: false`, `data: null`, and either `errors: string[]` (general errors) or `fieldErrors: { "fieldName": ["message"] }` (per-field validation errors) is populated.
+### RFC7807 `ProblemDetails` — every error path
 
-### RFC7807 `ProblemDetails` — thrown-exception path
-
-Raised by `ExceptionMiddleware` for exceptions thrown outside the normal validation pipeline (`NotFoundException` → 404, `DuplicateResourceException` → 409, `ServiceUnavailableException` → 503, unhandled → 500, and — importantly — the *domain* `ValidationException` also produces this shape, not `ApiResponse`):
+All middleware, authentication, authorization, model-binding, rate-limit, validation, domain, and unexpected failures use `application/problem+json`. `ExceptionMiddleware` maps application exceptions consistently (`NotFoundException` → 404, `DuplicateResourceException` → 409, validation → 422, `ServiceUnavailableException` → 503, unexpected → 500):
 
 ```json
 {
@@ -119,7 +121,7 @@ Raised by `ExceptionMiddleware` for exceptions thrown outside the normal validat
 }
 ```
 
-**Known contract subtlety**: this shape has no `success` key, and its `errors` field is a field-name → messages map (like `ApiResponse`'s `fieldErrors`), not the flat string array `ApiResponse.errors` uses. A client that only understands `ApiResponse` will silently lose field-level validation messages on this path unless it explicitly detects and normalizes both shapes (check for the absence of a `success` key, or the presence of `title`/`detail`).
+Clients should treat `status`, `title`, `detail`, `correlationId`, and the optional field-name-to-messages `errors` extension as the stable error contract.
 
 ---
 
@@ -299,15 +301,18 @@ Zelle and NGN bank transfer have no verification API and are always recorded as 
 { "status": "healthy", "timestamp": "...", "checks": [{"name": "database", "status": "healthy", "duration": 2.1}, {"name": "redis", "status": "healthy", "duration": 0.4}] }
 ```
 
-Database/Redis failures report `status: "degraded"` rather than failing the whole check — this is intentional so a load balancer's health probe doesn't take the whole API out of rotation over a transient cache blip. See `Program.cs`'s health check registration for the reasoning.
+Operational probes are separated by purpose:
+
+- `GET /health/live` checks only whether the process can serve HTTP.
+- `GET /health/ready` checks PostgreSQL and Redis. PostgreSQL failure is unhealthy and returns `503`; Redis failure is degraded because it is an optional cache.
+- `GET /healthz` is a compatibility alias for readiness and has the same failure semantics.
 
 ---
 
-## 6. Known gaps and inconsistencies
+## 6. Enforced integrity contracts
 
-Recorded here deliberately, so they're documented rather than rediscovered the hard way:
-
-1. **No Store product catalog.** `StoreController` only exposes `POST /checkout`; there is no `Product` entity, DTO, or `GET` endpoint anywhere in the backend. A frontend product-listing page has nothing to call until this is built. `CreateOrderRequest.items` accepts arbitrary client-supplied line items (name/price/quantity) — the checkout handler cross-checks the submitted `total` against what was actually paid via Paystack, but does **not** validate individual line-item prices against a source of truth, since none exists yet. Building a real catalog (entity + migration + `GET` endpoint, `[PublicEndpoint]`) would close both gaps at once.
-2. **Inconsistent pagination.** `Event`, `Media`, `Blog`, and `PrayerRequest` controllers return `PaginatedResult<T>`; `Album`, `Reel`, and `FAQ` return a flat list despite `Reel` accepting `page`/`pageSize` query params that are silently ignored for shaping the response (they still limit the query, just not wrapped in a pagination envelope). Worth standardizing on one approach.
-3. **Dual error-response shape.** See §3 — a client must handle both `ApiResponse` and RFC7807 `ProblemDetails` to reliably surface field-level validation errors. Consider having `ExceptionMiddleware` emit `ApiResponse`-shaped bodies for the validation-exception case specifically, since that's the one thrown-exception path a typical form submission actually hits.
-4. **`EventDto.flyerImagePath`** is stored/returned as-is, unlike `MediaItemDto.publicUrl` which is resolved to a full public URL via `IFileStorageService` before being returned. A consumer expecting a ready-to-use image URL from `EventDto` may get a bare relative path instead — worth aligning with the Media pattern.
+- Checkout treats the product catalog as the only source of truth for names, prices, images, descriptions, and availability. Client-supplied display fields are ignored. Totals are recomputed server-side, Paystack payments are verified against reference/amount/currency, and a payment reference can fund only one order.
+- Product inventory and event ticket capacity use PostgreSQL `xmin` optimistic concurrency tokens. Database constraints independently prevent negative inventory, oversold events, invalid ratings, and inconsistent order totals.
+- Refresh tokens are random bearer credentials delivered only through a Secure, HttpOnly, SameSite=Strict cookie. Only SHA-256 hashes are persisted. Tokens rotate on refresh and reuse revokes the user's active token family.
+- All error responses use `application/problem+json` with RFC 7807 fields. Validation failures include an `errors` field-name-to-messages extension and every request carries a validated correlation ID.
+- Paginated endpoints enforce `page >= 1` and `1 <= pageSize <= 100`. Reels return the same `PaginatedResult<T>` envelope as other paginated resources.
