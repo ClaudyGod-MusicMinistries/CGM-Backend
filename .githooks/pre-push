@@ -60,6 +60,12 @@ dotnet restore ClaudyGod.sln
 info "Building (Release)..."
 dotnet build ClaudyGod.sln --no-restore -c Release || die "Build failed. Fix the errors above before pushing."
 
+info "Verifying formatting..."
+dotnet format ClaudyGod.sln --no-restore --verify-no-changes || die "Formatting check failed. Run dotnet format ClaudyGod.sln."
+
+info "Auditing dependencies..."
+dotnet list ClaudyGod.sln package --vulnerable --include-transitive || die "Dependency audit failed."
+
 info "Running full test suite..."
 dotnet test ClaudyGod.sln --no-build -c Release --logger "console;verbosity=normal" || die "Tests failed. Fix the failing tests above before pushing."
 

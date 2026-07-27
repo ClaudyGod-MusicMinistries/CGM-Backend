@@ -10,21 +10,26 @@ public class RevokeTokenCommandHandler : IRequestHandler<RevokeTokenCommand>
 {
     private readonly IApplicationDbContext _db;
     private readonly ICurrentUserService _currentUser;
+    private readonly IJwtService _jwt;
 
-    public RevokeTokenCommandHandler(IApplicationDbContext db, ICurrentUserService currentUser)
+    public RevokeTokenCommandHandler(IApplicationDbContext db, ICurrentUserService currentUser,
+        IJwtService jwt)
     {
-        _db = db; _currentUser = currentUser;
+        _db = db;
+        _currentUser = currentUser;
+        _jwt = jwt;
     }
 
     public async Task Handle(RevokeTokenCommand request, CancellationToken ct)
     {
+        var tokenHash = _jwt.HashRefreshToken(request.Token);
         var user = await _db.Users
             .Include(u => u.RefreshTokens)
-            .FirstOrDefaultAsync(u => u.RefreshTokens.Any(t => t.Token == request.Token), ct);
+            .FirstOrDefaultAsync(u => u.RefreshTokens.Any(t => t.TokenHash == tokenHash), ct);
 
         if (user is null) return; // idempotent — already logged out
 
-        var token = user.RefreshTokens.FirstOrDefault(t => t.Token == request.Token);
+        var token = user.RefreshTokens.FirstOrDefault(t => t.TokenHash == tokenHash);
         if (token?.IsActive == true)
         {
             token.Revoke(_currentUser.IpAddress);

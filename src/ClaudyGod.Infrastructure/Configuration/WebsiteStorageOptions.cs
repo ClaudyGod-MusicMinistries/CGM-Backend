@@ -22,10 +22,14 @@ public class WebsiteStorageOptions
     /// <summary>Every missing key, by config path — used to build a clear boot-failure message rather than a generic "not configured".</summary>
     public IEnumerable<string> MissingKeys()
     {
-        if (string.IsNullOrWhiteSpace(S3Endpoint)) yield return $"{SectionName}:S3Endpoint";
-        if (string.IsNullOrWhiteSpace(S3AccessKeyId)) yield return $"{SectionName}:S3AccessKeyId";
-        if (string.IsNullOrWhiteSpace(S3SecretAccessKey)) yield return $"{SectionName}:S3SecretAccessKey";
-        if (string.IsNullOrWhiteSpace(Bucket)) yield return $"{SectionName}:Bucket";
-        if (string.IsNullOrWhiteSpace(PublicBaseUrl)) yield return $"{SectionName}:PublicBaseUrl";
+        if (IsMissing(S3Endpoint)) yield return $"{SectionName}:S3Endpoint";
+        if (IsMissing(S3AccessKeyId)) yield return $"{SectionName}:S3AccessKeyId";
+        if (IsMissing(S3SecretAccessKey)) yield return $"{SectionName}:S3SecretAccessKey";
+        if (IsMissing(Bucket)) yield return $"{SectionName}:Bucket";
+        if (IsMissing(PublicBaseUrl)) yield return $"{SectionName}:PublicBaseUrl";
     }
+
+    private static bool IsMissing(string value) =>
+        string.IsNullOrWhiteSpace(value) ||
+        value.StartsWith("CHANGE-ME", StringComparison.OrdinalIgnoreCase);
 }

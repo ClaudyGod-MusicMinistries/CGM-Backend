@@ -53,12 +53,12 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, AuthResul
 
         var accessToken = _jwt.GenerateAccessToken(user);
         var refreshToken = _jwt.GenerateRefreshToken(_currentUser.IpAddress);
-        refreshToken.UserId = user.Id;
-        user.RefreshTokens.Add(refreshToken);
+        refreshToken.Entity.UserId = user.Id;
+        user.RefreshTokens.Add(refreshToken.Entity);
 
         await _db.SaveChangesAsync(ct);
 
         return new AuthResult(accessToken.Token, accessToken.ExpiresAt,
-            refreshToken.Token, refreshToken.ExpiresAt, user.Role.ToString());
+            refreshToken.PlainTextToken, refreshToken.Entity.ExpiresAt, user.Role.ToString());
     }
 }

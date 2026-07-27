@@ -67,6 +67,8 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
         modelBuilder.Entity<Album>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Comment>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<UploadSession>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<BlogPostTag>().HasQueryFilter(e => !e.BlogPost.IsDeleted);
+        modelBuilder.Entity<RefreshToken>().HasQueryFilter(e => !e.User.IsDeleted);
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

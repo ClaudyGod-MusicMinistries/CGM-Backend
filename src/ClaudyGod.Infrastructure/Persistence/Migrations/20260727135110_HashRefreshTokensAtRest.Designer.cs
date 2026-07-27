@@ -3,6 +3,7 @@ using System;
 using ClaudyGod.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ClaudyGod.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260727135110_HashRefreshTokensAtRest")]
+    partial class HashRefreshTokensAtRest
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -295,9 +298,14 @@ namespace ClaudyGod.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("BlogTagId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("BlogTagId1")
+                        .HasColumnType("uuid");
+
                     b.HasKey("BlogPostId", "BlogTagId");
 
                     b.HasIndex("BlogTagId");
+
+                    b.HasIndex("BlogTagId1");
 
                     b.ToTable("BlogPostTags");
                 });
@@ -957,18 +965,9 @@ namespace ClaudyGod.Infrastructure.Persistence.Migrations
                     b.HasIndex("OrderId")
                         .IsUnique();
 
-                    b.HasIndex("PaystackReference")
-                        .IsUnique()
-                        .HasFilter("\"PaystackReference\" IS NOT NULL");
-
                     b.HasIndex("Status");
 
-                    b.ToTable("Orders", t =>
-                        {
-                            t.HasCheckConstraint("CK_Orders_Amounts_NonNegative", "\"Subtotal\" >= 0 AND \"ShippingCost\" >= 0 AND \"Total\" >= 0");
-
-                            t.HasCheckConstraint("CK_Orders_Total_EqualsComponents", "\"Total\" = \"Subtotal\" + \"ShippingCost\"");
-                        });
+                    b.ToTable("Orders");
                 });
 
             modelBuilder.Entity("ClaudyGod.Domain.Entities.Payment", b =>
@@ -1250,26 +1249,13 @@ namespace ClaudyGod.Infrastructure.Persistence.Migrations
                     b.Property<string>("UpdatedBy")
                         .HasColumnType("text");
 
-                    b.Property<uint>("Version")
-                        .IsConcurrencyToken()
-                        .ValueGeneratedOnAddOrUpdate()
-                        .HasColumnType("xid")
-                        .HasColumnName("xmin");
-
                     b.HasKey("Id");
 
                     b.HasIndex("Category");
 
                     b.HasIndex("IsPublished", "SortOrder");
 
-                    b.ToTable("Products", t =>
-                        {
-                            t.HasCheckConstraint("CK_Products_Price_NonNegative", "\"Price\" >= 0");
-
-                            t.HasCheckConstraint("CK_Products_Quantity_NonNegative", "\"Quantity\" IS NULL OR \"Quantity\" >= 0");
-
-                            t.HasCheckConstraint("CK_Products_Rating_Range", "\"Rating\" IS NULL OR (\"Rating\" >= 0 AND \"Rating\" <= 5)");
-                        });
+                    b.ToTable("Products");
                 });
 
             modelBuilder.Entity("ClaudyGod.Domain.Entities.Reaction", b =>
@@ -1529,6 +1515,9 @@ namespace ClaudyGod.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("EventId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("EventId1")
+                        .HasColumnType("uuid");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean");
 
@@ -1554,6 +1543,8 @@ namespace ClaudyGod.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.HasIndex("EventId");
+
+                    b.HasIndex("EventId1");
 
                     b.HasIndex("EventId", "Status");
 
@@ -1865,10 +1856,14 @@ namespace ClaudyGod.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.HasOne("ClaudyGod.Domain.Entities.BlogTag", "BlogTag")
-                        .WithMany("PostTags")
+                        .WithMany()
                         .HasForeignKey("BlogTagId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("ClaudyGod.Domain.Entities.BlogTag", null)
+                        .WithMany("PostTags")
+                        .HasForeignKey("BlogTagId1");
 
                     b.Navigation("BlogPost");
 
@@ -2031,10 +2026,14 @@ namespace ClaudyGod.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("ClaudyGod.Domain.Entities.TicketReservation", b =>
                 {
                     b.HasOne("ClaudyGod.Domain.Entities.Event", "Event")
-                        .WithMany("Reservations")
+                        .WithMany()
                         .HasForeignKey("EventId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("ClaudyGod.Domain.Entities.Event", null)
+                        .WithMany("Reservations")
+                        .HasForeignKey("EventId1");
 
                     b.Navigation("Event");
                 });

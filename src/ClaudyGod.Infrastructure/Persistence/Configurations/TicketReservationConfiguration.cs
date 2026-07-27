@@ -18,7 +18,7 @@ public class TicketReservationConfiguration : IEntityTypeConfiguration<TicketRes
         builder.Property(t => t.CheckedInBy).HasMaxLength(200);
 
         builder.HasOne(t => t.Event)
-               .WithMany()
+               .WithMany(e => e.Reservations)
                .HasForeignKey(t => t.EventId)
                .OnDelete(DeleteBehavior.Restrict);
 

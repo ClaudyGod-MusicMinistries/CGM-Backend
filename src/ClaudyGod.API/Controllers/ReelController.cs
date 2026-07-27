@@ -22,13 +22,13 @@ public class ReelController : ControllerBase
     /// </summary>
     [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpGet]
-    public async Task<ActionResult<ApiResponse<List<ReelDto>>>> GetAll(
+    public async Task<ActionResult<ApiResponse<PaginatedResult<ReelDto>>>> GetAll(
         [FromQuery] string? category,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken ct = default)
     {
         var result = await _mediator.Send(new GetReelsQuery(category, page, pageSize), ct);
-        return Ok(ApiResponse<List<ReelDto>>.Ok(result));
+        return Ok(ApiResponse<PaginatedResult<ReelDto>>.Ok(result));
     }
 }

@@ -32,9 +32,8 @@ public class MediaController : ControllerBase
             if (!Enum.TryParse<MediaType>(type, ignoreCase: true, out var value))
             {
                 var valid = string.Join(", ", Enum.GetNames<MediaType>());
-                return BadRequest(ApiResponse<PaginatedResult<MediaItemDto>>.Fail(
-                    $"'{type}' is not a valid media type.",
-                    [$"type must be one of: {valid}"]));
+                throw new ClaudyGod.Domain.Exceptions.ValidationException(
+                    new Dictionary<string, string[]> { ["type"] = [$"Type must be one of: {valid}."] });
             }
             parsedType = value;
         }

@@ -50,16 +50,7 @@ public class ApiKeyMiddleware
             if (string.IsNullOrWhiteSpace(apiKey))
             {
                 _logger.LogWarning("Missing API key for endpoint: {Path}", path);
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                await context.Response.WriteAsJsonAsync(new
-                {
-                    success = false,
-                    message = "Unauthorized access",
-                    data = (object?)null,
-                    errors = new[] { "Missing or invalid API key" },
-                    fieldErrors = new Dictionary<string, string[]>()
-                });
-                return;
+                throw new UnauthorizedAccessException("Missing or invalid API key.");
             }
 
             // Validate API key
@@ -67,16 +58,7 @@ public class ApiKeyMiddleware
             if (!validKeys.Any(key => FixedTimeEquals(key, apiKey)))
             {
                 _logger.LogWarning("Invalid API key attempt for endpoint: {Path}. Key: {KeyLast4}", path, apiKey.Length > 4 ? apiKey[^4..] : "****");
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                await context.Response.WriteAsJsonAsync(new
-                {
-                    success = false,
-                    message = "Unauthorized access",
-                    data = (object?)null,
-                    errors = new[] { "Invalid API key" },
-                    fieldErrors = new Dictionary<string, string[]>()
-                });
-                return;
+                throw new UnauthorizedAccessException("Missing or invalid API key.");
             }
 
             // Store key info in context for logging

@@ -20,12 +20,13 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, A
 
     public async Task<AuthResult> Handle(RefreshTokenCommand request, CancellationToken ct)
     {
+        var tokenHash = _jwt.HashRefreshToken(request.Token);
         var user = await _db.Users
             .Include(u => u.RefreshTokens)
-            .FirstOrDefaultAsync(u => u.RefreshTokens.Any(t => t.Token == request.Token), ct)
-            ?? throw new Domain.Exceptions.NotFoundException("Invalid refresh token.");
+            .FirstOrDefaultAsync(u => u.RefreshTokens.Any(t => t.TokenHash == tokenHash), ct)
+            ?? throw new UnauthorizedAccessException("Invalid refresh token.");
 
-        var oldToken = user.RefreshTokens.First(t => t.Token == request.Token);
+        var oldToken = user.RefreshTokens.First(t => t.TokenHash == tokenHash);
 
         if (!oldToken.IsActive)
         {
@@ -41,12 +42,12 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, A
 
         var newAccessToken = _jwt.GenerateAccessToken(user);
         var newRefreshToken = _jwt.GenerateRefreshToken(_currentUser.IpAddress);
-        newRefreshToken.UserId = user.Id;
-        user.RefreshTokens.Add(newRefreshToken);
+        newRefreshToken.Entity.UserId = user.Id;
+        user.RefreshTokens.Add(newRefreshToken.Entity);
 
         await _db.SaveChangesAsync(ct);
 
         return new AuthResult(newAccessToken.Token, newAccessToken.ExpiresAt,
-            newRefreshToken.Token, newRefreshToken.ExpiresAt, user.Role.ToString());
+            newRefreshToken.PlainTextToken, newRefreshToken.Entity.ExpiresAt, user.Role.ToString());
     }
 }

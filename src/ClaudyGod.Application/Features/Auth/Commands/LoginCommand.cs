@@ -19,6 +19,7 @@ public class LoginCommandValidator : AbstractValidator<LoginCommand>
 
 public class LoginCommandHandler : IRequestHandler<LoginCommand, AuthResult>
 {
+    private const string DummyPasswordHash = "$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxfFP5kJ8QO.K7O3V5D7CuZU7mK";
     private readonly IApplicationDbContext _db;
     private readonly IJwtService _jwt;
     private readonly ICurrentUserService _currentUser;
@@ -34,14 +35,19 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, AuthResult>
     {
         var user = await _db.Users
             .Include(u => u.RefreshTokens)
-            .FirstOrDefaultAsync(u => u.Email == request.Email.ToLowerInvariant(), ct)
-            ?? throw new Domain.Exceptions.NotFoundException("Invalid email or password.");
+            .FirstOrDefaultAsync(u => u.Email == request.Email.ToLowerInvariant().Trim(), ct);
 
-        if (!user.IsActive)
-            throw new Domain.Exceptions.DomainException("Account is deactivated.");
+        if (user is null)
+        {
+            BCrypt.Net.BCrypt.Verify(request.Password, DummyPasswordHash);
+            throw new UnauthorizedAccessException("Invalid email or password.");
+        }
 
         if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
-            throw new Domain.Exceptions.NotFoundException("Invalid email or password.");
+            throw new UnauthorizedAccessException("Invalid email or password.");
+
+        if (!user.IsActive)
+            throw new UnauthorizedAccessException("Invalid email or password.");
 
         // Revoke all tokens from same IP to enforce single-session-per-device
         var staleTokens = user.RefreshTokens
@@ -54,12 +60,12 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, AuthResult>
 
         var accessToken = _jwt.GenerateAccessToken(user);
         var refreshToken = _jwt.GenerateRefreshToken(_currentUser.IpAddress);
-        refreshToken.UserId = user.Id;
-        user.RefreshTokens.Add(refreshToken);
+        refreshToken.Entity.UserId = user.Id;
+        user.RefreshTokens.Add(refreshToken.Entity);
 
         await _db.SaveChangesAsync(ct);
 
         return new AuthResult(accessToken.Token, accessToken.ExpiresAt,
-            refreshToken.Token, refreshToken.ExpiresAt, user.Role.ToString());
+            refreshToken.PlainTextToken, refreshToken.Entity.ExpiresAt, user.Role.ToString());
     }
 }

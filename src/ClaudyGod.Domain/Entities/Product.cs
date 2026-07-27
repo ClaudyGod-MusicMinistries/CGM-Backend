@@ -1,3 +1,5 @@
+using ClaudyGod.Domain.Exceptions;
+
 namespace ClaudyGod.Domain.Entities;
 
 public class Product : AuditableEntity
@@ -12,6 +14,7 @@ public class Product : AuditableEntity
     public decimal? Rating { get; private set; }
     public int SortOrder { get; private set; }
     public bool IsPublished { get; private set; } = true;
+    public uint Version { get; private set; }
 
     protected Product() { }
 
@@ -42,6 +45,20 @@ public class Product : AuditableEntity
     public void Publish() => IsPublished = true;
     public void Unpublish() => IsPublished = false;
     public void UpdateStock(bool inStock, int? quantity) => (InStock, Quantity) = (inStock, quantity);
+
+    public void ReserveStock(int quantity)
+    {
+        if (quantity <= 0)
+            throw new DomainException("Product quantity must be greater than zero.");
+        if (!InStock || (Quantity.HasValue && Quantity.Value < quantity))
+            throw new DomainException($"'{Title}' does not have enough stock for this order.");
+
+        if (Quantity.HasValue)
+        {
+            Quantity -= quantity;
+            InStock = Quantity > 0;
+        }
+    }
 
     public void Update(
         string title,

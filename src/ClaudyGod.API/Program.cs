@@ -5,6 +5,7 @@ using ClaudyGod.Application;
 using ClaudyGod.Infrastructure;
 using ClaudyGod.Infrastructure.Persistence;
 using ClaudyGod.API.Middleware;
+using ClaudyGod.API.Filters;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -56,6 +57,21 @@ try
 
     var builder = WebApplication.CreateBuilder(args);
 
+    static bool IsPlaceholder(string? value) =>
+        string.IsNullOrWhiteSpace(value) ||
+        value.StartsWith("CHANGE-ME", StringComparison.OrdinalIgnoreCase);
+
+    if (builder.Environment.IsProduction())
+    {
+        if (IsPlaceholder(builder.Configuration.GetConnectionString("DefaultConnection")) ||
+            builder.Configuration.GetConnectionString("DefaultConnection")!.Contains("Password=CHANGE-ME", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("A production database connection string must be configured.");
+        if (IsPlaceholder(builder.Configuration["Jwt:Key"]))
+            throw new InvalidOperationException("A production JWT signing key must be configured.");
+        if (IsPlaceholder(builder.Configuration["Jwt:Issuer"]) || IsPlaceholder(builder.Configuration["Jwt:Audience"]))
+            throw new InvalidOperationException("Jwt:Issuer and Jwt:Audience must be configured in production.");
+    }
+
     var configuredApiKeys = builder.Configuration.GetSection("Security:ApiKeys").Get<string[]>()
         ?.Where(key => !string.IsNullOrWhiteSpace(key))
         .ToArray() ?? [];
@@ -78,7 +94,7 @@ try
     builder.Services.AddInfrastructure(builder.Configuration);
 
     // Controllers
-    builder.Services.AddControllers()
+    builder.Services.AddControllers(options => options.Filters.Add<PaginationValidationFilter>())
         .AddJsonOptions(options =>
         {
             options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
@@ -200,6 +216,36 @@ try
                 ValidateLifetime = true,
                 ClockSkew = TimeSpan.Zero
             };
+            options.Events = new JwtBearerEvents
+            {
+                OnChallenge = async context =>
+                {
+                    context.HandleResponse();
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    context.Response.ContentType = "application/problem+json";
+                    await context.Response.WriteAsJsonAsync(new ProblemDetails
+                    {
+                        Type = "https://httpstatuses.io/401",
+                        Title = "Unauthorized",
+                        Status = StatusCodes.Status401Unauthorized,
+                        Detail = "A valid bearer token is required.",
+                        Instance = context.Request.Path,
+                    });
+                },
+                OnForbidden = async context =>
+                {
+                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    context.Response.ContentType = "application/problem+json";
+                    await context.Response.WriteAsJsonAsync(new ProblemDetails
+                    {
+                        Type = "https://httpstatuses.io/403",
+                        Title = "Forbidden",
+                        Status = StatusCodes.Status403Forbidden,
+                        Detail = "The authenticated identity does not have permission to access this resource.",
+                        Instance = context.Request.Path,
+                    });
+                },
+            };
         });
 
     builder.Services.AddAuthorization(options =>
@@ -319,13 +365,16 @@ try
         options.OnRejected = async (ctx, token) =>
         {
             ctx.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
-            ctx.HttpContext.Response.ContentType = "application/json";
+            ctx.HttpContext.Response.ContentType = "application/problem+json";
             var retryAfter = ctx.Lease.TryGetMetadata(MetadataName.RetryAfter, out var r) ? (int)r.TotalSeconds : 60;
             ctx.HttpContext.Response.Headers["Retry-After"] = retryAfter.ToString();
-            var json = JsonSerializer.Serialize(new
+            var json = JsonSerializer.Serialize(new ProblemDetails
             {
-                success = false,
-                message = $"Rate limit exceeded. Please retry after {retryAfter} seconds."
+                Type = "https://httpstatuses.io/429",
+                Title = "Too Many Requests",
+                Status = StatusCodes.Status429TooManyRequests,
+                Detail = $"Rate limit exceeded. Retry after {retryAfter} seconds.",
+                Instance = ctx.HttpContext.Request.Path,
             });
             await ctx.HttpContext.Response.WriteAsync(json, token);
         };
@@ -372,9 +421,9 @@ try
     // attached, which the browser reports as a CORS failure instead of the real 401.
     app.UseCors("AllowFrontend");
 
+    app.UseMiddleware<ExceptionMiddleware>();
     app.UseMiddleware<SecurityHeadersMiddleware>();
     app.UseMiddleware<ApiKeyMiddleware>();
-    app.UseMiddleware<ExceptionMiddleware>();
 
     app.UseHttpsRedirection();
     app.UseStaticFiles();
