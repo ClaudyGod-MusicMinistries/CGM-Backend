@@ -38,14 +38,13 @@ public class SubmitContactCommandHandler : IRequestHandler<SubmitContactCommand,
     {
         var message = ContactMessage.Create(request.Name, request.Email, request.Message);
         _db.ContactMessages.Add(message);
-        await _db.SaveChangesAsync(ct);
-
         await _email.TrySendFromTemplateAsync(request.Email, "contact-confirmation", new Dictionary<string, string>
         {
             ["subject"] = "We received your message – ClaudyGod Ministry",
             ["name"] = request.Name,
             ["message"] = request.Message
         }, _logger, ct);
+        await _db.SaveChangesAsync(ct);
 
         return message.Id;
     }

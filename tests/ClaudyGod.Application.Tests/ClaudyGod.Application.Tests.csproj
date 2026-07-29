@@ -11,10 +11,14 @@
 
   <ItemGroup>
     <PackageReference Include="FluentAssertions" Version="8.10.0" />
+    <!-- FluentValidation.TestHelper isn't a separate package since FluentValidation 9 —
+         TestValidate()/ShouldHaveValidationErrorFor() ship in the main package itself,
+         already referenced transitively via the ClaudyGod.Application project reference. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.11" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.6.0" />
     <PackageReference Include="NSubstitute" Version="5.3.0" />
-    <PackageReference Include="xunit" Version="2.4.2" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="2.4.5">
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
@@ -27,6 +31,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\ClaudyGod.Application\ClaudyGod.Application.csproj" />
     <ProjectReference Include="..\..\src\ClaudyGod.Domain\ClaudyGod.Domain.csproj" />
+    <ProjectReference Include="..\..\src\ClaudyGod.Infrastructure\ClaudyGod.Infrastructure.csproj" />
   </ItemGroup>
 
 </Project>

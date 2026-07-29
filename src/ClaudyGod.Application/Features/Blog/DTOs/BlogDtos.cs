@@ -8,6 +8,7 @@ public record CreateBlogPostRequest(
     string? AuthorName,
     Guid? CategoryId,
     List<Guid>? TagIds,
+    string? FeaturedImageUrl = null,
     bool Publish = false);
 
 public record UpdateBlogPostRequest(
@@ -17,7 +18,8 @@ public record UpdateBlogPostRequest(
     string? Excerpt,
     string? AuthorName,
     Guid? CategoryId,
-    List<Guid>? TagIds);
+    List<Guid>? TagIds,
+    string? FeaturedImageUrl = null);
 
 public record BlogPostDto(
     Guid Id,

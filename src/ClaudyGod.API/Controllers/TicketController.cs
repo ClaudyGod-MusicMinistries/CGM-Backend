@@ -1,11 +1,11 @@
 using Asp.Versioning;
+using ClaudyGod.API.Attributes;
 using ClaudyGod.Application.Common.Models;
 using ClaudyGod.Application.Features.Tickets.Commands;
 using ClaudyGod.Application.Features.Tickets.DTOs;
 using ClaudyGod.Application.Features.Tickets.Queries;
 using ClaudyGod.Domain.Enums;
 using MediatR;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClaudyGod.API.Controllers;
@@ -19,6 +19,8 @@ public class TicketController : ControllerBase
 
     public TicketController(IMediator mediator) => _mediator = mediator;
 
+    [PublicEndpoint]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("public-form")]
     [HttpPost]
     public async Task<ActionResult<ApiResponse<object>>> Reserve(
         [FromBody] ReserveTicketRequest dto, CancellationToken ct)
@@ -27,7 +29,6 @@ public class TicketController : ControllerBase
         return Ok(ApiResponse<object>.Ok(new { confirmationCode }, "Ticket reserved successfully."));
     }
 
-    [Authorize(Roles = "Admin,SuperAdmin")]
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PaginatedResult<TicketDto>>>> GetAll(
         [FromQuery] Guid? eventId = null, [FromQuery] int page = 1,
@@ -36,5 +37,12 @@ public class TicketController : ControllerBase
     {
         var result = await _mediator.Send(new GetTicketsQuery(eventId, page, pageSize, status), ct);
         return Ok(ApiResponse<PaginatedResult<TicketDto>>.Ok(result));
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<ActionResult<ApiResponse>> Delete(Guid id, CancellationToken ct)
+    {
+        await _mediator.Send(new DeleteTicketCommand(id), ct);
+        return Ok(ApiResponse.Ok("Ticket reservation moved to trash."));
     }
 }

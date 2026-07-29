@@ -54,7 +54,7 @@ public class EmailService : IEmailService
         };
 
         var multipart = new Multipart("mixed");
-        multipart.Add(message.Body);
+        multipart.Add(message.Body!);
         multipart.Add(part);
         message.Body = multipart;
 

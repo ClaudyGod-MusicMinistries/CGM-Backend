@@ -73,20 +73,6 @@ public class ReserveTicketCommandHandler : IRequestHandler<ReserveTicketCommand,
         ev.IncrementReserved(r.Quantity);
         _db.TicketReservations.Add(reservation);
 
-        try
-        {
-            await _db.SaveChangesAsync(ct);
-        }
-        catch (Microsoft.EntityFrameworkCore.DbUpdateException)
-        {
-            // Re-read event to get accurate seat count — another request may have taken the last seats
-            var fresh = await _db.Events.FirstOrDefaultAsync(e => e.Id == r.EventId, ct);
-            throw new Domain.Exceptions.DomainException(
-                fresh is null || fresh.AvailableSeats <= 0
-                    ? "This event just sold out — please try another event."
-                    : $"Only {fresh.AvailableSeats} seat(s) remaining. Please refresh and try again.");
-        }
-
         await _email.TrySendFromTemplateAsync(r.Email, "ticket-confirmation", new Dictionary<string, string>
         {
             ["subject"] = $"Ticket Confirmed – {ev.Title}",
@@ -97,6 +83,19 @@ public class ReserveTicketCommandHandler : IRequestHandler<ReserveTicketCommand,
             ["quantity"] = r.Quantity.ToString(),
             ["confirmationCode"] = confirmationCode
         }, _logger, ct);
+
+        try
+        {
+            await _db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            var fresh = await _db.Events.AsNoTracking().FirstOrDefaultAsync(e => e.Id == r.EventId, ct);
+            throw new Domain.Exceptions.DomainException(
+                fresh is null || fresh.AvailableSeats <= 0
+                    ? "This event just sold out — please try another event."
+                    : $"Only {fresh.AvailableSeats} seat(s) remaining. Please refresh and try again.");
+        }
 
         return confirmationCode;
     }

@@ -9,7 +9,7 @@ public class Booking : AuditableEntity
     public string LastName { get; private set; } = string.Empty;
     public string Email { get; private set; } = string.Empty;
     public string Phone { get; private set; } = string.Empty;
-    public CountryCode CountryCode { get; private set; }
+    public string CountryCode { get; private set; } = string.Empty;
     public string Organization { get; private set; } = string.Empty;
     public string OrgType { get; private set; } = string.Empty;
     public string EventType { get; private set; } = string.Empty;
@@ -24,7 +24,7 @@ public class Booking : AuditableEntity
 
     public static Booking Create(
         string firstName, string lastName, string email, string phone,
-        CountryCode countryCode, string organization, string orgType,
+        string countryCode, string organization, string orgType,
         string eventType, string eventDetails, DateTime eventDate,
         Address address)
     {
@@ -34,7 +34,7 @@ public class Booking : AuditableEntity
             LastName = lastName.Trim(),
             Email = email.ToLowerInvariant().Trim(),
             Phone = phone.Trim(),
-            CountryCode = countryCode,
+            CountryCode = countryCode.Trim().ToUpperInvariant(),
             Organization = organization.Trim(),
             OrgType = orgType.Trim(),
             EventType = eventType.Trim(),

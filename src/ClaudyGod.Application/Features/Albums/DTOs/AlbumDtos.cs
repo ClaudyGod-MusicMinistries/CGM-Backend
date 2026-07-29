@@ -12,3 +12,14 @@ public record AlbumDto(
     int SortOrder,
     DateTime? ReleasedAt
 );
+
+public record CreateAlbumRequest(
+    string Title,
+    string? ImageUrl = null,
+    string? SpotifyUrl = null,
+    string? AppleUrl = null,
+    string? YoutubeUrl = null,
+    string? DeezerUrl = null,
+    string? AmazonUrl = null,
+    int SortOrder = 0,
+    DateTime? ReleasedAt = null);

@@ -15,8 +15,8 @@ public interface IEmailService
 }
 
 /// <summary>
-/// Fire-and-forget email helpers that log failures without propagating exceptions.
-/// Use these in command handlers so email errors never fail the primary operation.
+/// Compatibility helpers for enqueueing durable email work. Enqueue failures are
+/// intentionally propagated so the business record and notification cannot diverge.
 /// </summary>
 public static class EmailServiceExtensions
 {
@@ -28,15 +28,7 @@ public static class EmailServiceExtensions
         ILogger logger,
         CancellationToken ct = default)
     {
-        try
-        {
-            await email.SendFromTemplateAsync(to, templateName, variables, ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Email notification failed for template '{Template}' to {Recipient}",
-                templateName, to);
-        }
+        await email.SendFromTemplateAsync(to, templateName, variables, ct);
     }
 
     public static async Task TrySendAsync(
@@ -47,14 +39,6 @@ public static class EmailServiceExtensions
         ILogger logger,
         CancellationToken ct = default)
     {
-        try
-        {
-            await email.SendAsync(to, subject, htmlBody, ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Email notification failed with subject '{Subject}' to {Recipient}",
-                subject, to);
-        }
+        await email.SendAsync(to, subject, htmlBody, ct);
     }
 }

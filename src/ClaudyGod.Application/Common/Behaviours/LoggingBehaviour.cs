@@ -1,5 +1,6 @@
 using MediatR;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 
 namespace ClaudyGod.Application.Common.Behaviours;
 
@@ -19,13 +20,21 @@ public class LoggingBehaviour<TRequest, TResponse> : IPipelineBehavior<TRequest,
         var requestName = typeof(TRequest).Name;
         _logger.LogInformation("ClaudyGod Request: {Name}", requestName);
 
-        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-        var response = await next();
-        stopwatch.Stop();
-
-        _logger.LogInformation("ClaudyGod Request: {Name} completed in {ElapsedMs}ms",
-            requestName, stopwatch.ElapsedMilliseconds);
-
-        return response;
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            var response = await next();
+            _logger.LogInformation(
+                "Application request {RequestName} completed in {ElapsedMs}ms TraceId={TraceId}",
+                requestName, stopwatch.ElapsedMilliseconds, Activity.Current?.TraceId.ToString());
+            return response;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                "Application request {RequestName} failed after {ElapsedMs}ms TraceId={TraceId} ExceptionType={ExceptionType}",
+                requestName, stopwatch.ElapsedMilliseconds, Activity.Current?.TraceId.ToString(), ex.GetType().Name);
+            throw;
+        }
     }
 }

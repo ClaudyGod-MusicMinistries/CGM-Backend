@@ -11,6 +11,13 @@ public class MediaItem : AuditableEntity
     public string FileName { get; private set; } = string.Empty;
     public string ContentType { get; private set; } = string.Empty;
     public long FileSizeBytes { get; private set; }
+    /// <summary>
+    /// Set only for link-created items (see <see cref="CreateLink"/>) — an
+    /// externally-hosted video (YouTube, etc.) with nothing stored via
+    /// IWebsiteStorageService. Null for real uploaded files, which use
+    /// <see cref="FilePath"/> instead.
+    /// </summary>
+    public string? ExternalUrl { get; private set; }
     public string? ThumbnailPath { get; private set; }
     public string? ArtistName { get; private set; }
     public string? AlbumName { get; private set; }
@@ -37,10 +44,45 @@ public class MediaItem : AuditableEntity
             AlbumName = albumName
         };
 
+    /// <summary>
+    /// Registers externally-hosted media (a YouTube link, etc.) with no file
+    /// upload — distinct from <see cref="Create"/>, which always stores a
+    /// real file via IWebsiteStorageService. FilePath/FileName/ContentType stay
+    /// empty and FileSizeBytes stays 0 since they don't apply to a link.
+    /// </summary>
+    public static MediaItem CreateLink(string title, MediaType type, string externalUrl,
+        string? thumbnailUrl = null, string? description = null) =>
+        new()
+        {
+            Title = title.Trim(),
+            Type = type,
+            ExternalUrl = externalUrl,
+            ThumbnailPath = thumbnailUrl,
+            Description = description,
+            IsPublished = true
+        };
+
     public void Publish() => IsPublished = true;
     public void Unpublish() => IsPublished = false;
     public void IncrementView() => ViewCount++;
     public void IncrementDownload() => DownloadCount++;
     public void SetThumbnail(string path) => ThumbnailPath = path;
     public void SetDuration(int seconds) => DurationSeconds = seconds;
+
+    /// <summary>
+    /// Edits a link-created item's metadata — title, type, the external URL
+    /// itself, thumbnail, and description. Only meaningful for items created
+    /// via <see cref="CreateLink"/>; a real uploaded file's binary content
+    /// (FilePath/FileName/ContentType/FileSizeBytes) is immutable by design,
+    /// so this never touches those fields.
+    /// </summary>
+    public void UpdateLink(string title, MediaType type, string externalUrl,
+        string? thumbnailUrl, string? description)
+    {
+        Title = title.Trim();
+        Type = type;
+        ExternalUrl = externalUrl;
+        ThumbnailPath = thumbnailUrl;
+        Description = description;
+    }
 }

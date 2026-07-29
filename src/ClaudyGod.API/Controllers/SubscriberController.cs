@@ -1,10 +1,10 @@
 using Asp.Versioning;
+using ClaudyGod.API.Attributes;
 using ClaudyGod.Application.Common.Models;
 using ClaudyGod.Application.Features.Subscribers.Commands;
 using ClaudyGod.Application.Features.Subscribers.DTOs;
 using ClaudyGod.Application.Features.Subscribers.Queries;
 using MediatR;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 
@@ -19,6 +19,7 @@ public class SubscriberController : ControllerBase
 
     public SubscriberController(IMediator mediator) => _mediator = mediator;
 
+    [PublicEndpoint]
     [HttpPost]
     [EnableRateLimiting("subscription")]
     public async Task<ActionResult<ApiResponse<object>>> Subscribe(
@@ -28,6 +29,7 @@ public class SubscriberController : ControllerBase
         return Ok(ApiResponse<object>.Ok(new { id }, "Successfully subscribed!"));
     }
 
+    [PublicEndpoint]
     [HttpDelete("unsubscribe")]
     [EnableRateLimiting("subscription")]
     public async Task<ActionResult<ApiResponse>> Unsubscribe(
@@ -37,7 +39,6 @@ public class SubscriberController : ControllerBase
         return Ok(ApiResponse.Ok("You have been unsubscribed."));
     }
 
-    [Authorize(Roles = "Admin,SuperAdmin")]
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PaginatedResult<SubscriberDto>>>> GetAll(
         [FromQuery] int page = 1, [FromQuery] int pageSize = 20,
@@ -45,5 +46,12 @@ public class SubscriberController : ControllerBase
     {
         var result = await _mediator.Send(new GetSubscribersQuery(page, pageSize, isActive), ct);
         return Ok(ApiResponse<PaginatedResult<SubscriberDto>>.Ok(result));
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<ActionResult<ApiResponse>> Delete(Guid id, CancellationToken ct)
+    {
+        await _mediator.Send(new DeleteSubscriberCommand(id), ct);
+        return Ok(ApiResponse.Ok("Subscriber moved to trash."));
     }
 }

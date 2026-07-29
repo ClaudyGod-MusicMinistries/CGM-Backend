@@ -1,6 +1,7 @@
 using Asp.Versioning;
 using ClaudyGod.Application.Common.Models;
 using ClaudyGod.Application.Features.Payments.Commands;
+using ClaudyGod.Application.Features.Payments.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
 
@@ -15,6 +16,20 @@ public class PaymentController : ControllerBase
 
     public PaymentController(IMediator mediator) => _mediator = mediator;
 
+    /// <summary>
+    /// Which payment methods are currently active. Lets the frontend hide/disable a
+    /// method proactively instead of letting a user submit into a dead end.
+    /// </summary>
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    [HttpGet("status")]
+    public async Task<ActionResult<ApiResponse<PaymentMethodsStatusDto>>> GetStatus(CancellationToken ct)
+    {
+        var status = await _mediator.Send(new GetPaymentMethodsStatusQuery(), ct);
+        return Ok(ApiResponse<PaymentMethodsStatusDto>.Ok(status));
+    }
+
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("commerce")]
     [HttpPost("zelle/validate")]
     public async Task<ActionResult<ApiResponse<object>>> ValidateZelle(
         [FromBody] ValidateZelleRequest dto, CancellationToken ct)
@@ -26,6 +41,8 @@ public class PaymentController : ControllerBase
         return Ok(ApiResponse<object>.Ok(new { id }, "Zelle payment recorded and pending verification."));
     }
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("commerce")]
     [HttpPost("ngn-transfer/validate")]
     [RequestSizeLimit(10 * 1024 * 1024)]
     public async Task<ActionResult<ApiResponse<object>>> ValidateNigerianTransfer(
@@ -37,6 +54,8 @@ public class PaymentController : ControllerBase
         return Ok(ApiResponse<object>.Ok(new { id }, "Bank transfer recorded and pending validation."));
     }
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("commerce")]
     [HttpPost("paystack/record")]
     public async Task<ActionResult<ApiResponse<object>>> RecordPaystackPayment(
         [FromBody] RecordPaystackPaymentRequest dto, CancellationToken ct)

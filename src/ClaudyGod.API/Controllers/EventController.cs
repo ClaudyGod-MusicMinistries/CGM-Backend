@@ -5,7 +5,6 @@ using ClaudyGod.Application.Features.Events.DTOs;
 using ClaudyGod.Application.Features.Events.Queries;
 using ClaudyGod.Domain.Enums;
 using MediatR;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClaudyGod.API.Controllers;
@@ -19,6 +18,7 @@ public class EventController : ControllerBase
 
     public EventController(IMediator mediator) => _mediator = mediator;
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PaginatedResult<EventDto>>>> GetAll(
         [FromQuery] int page = 1, [FromQuery] int pageSize = 10,
@@ -28,6 +28,7 @@ public class EventController : ControllerBase
         return Ok(ApiResponse<PaginatedResult<EventDto>>.Ok(result));
     }
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ApiResponse<EventDetailDto>>> GetById(Guid id, CancellationToken ct)
     {
@@ -35,7 +36,6 @@ public class EventController : ControllerBase
         return Ok(ApiResponse<EventDetailDto>.Ok(result));
     }
 
-    [Authorize(Roles = "Admin,SuperAdmin")]
     [HttpPost]
     public async Task<ActionResult<ApiResponse<object>>> Create(
         [FromBody] CreateEventRequest dto, CancellationToken ct)
@@ -45,17 +45,34 @@ public class EventController : ControllerBase
             ApiResponse<object>.Ok(new { id }, "Event created."));
     }
 
-    [Authorize(Roles = "Admin,SuperAdmin")]
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<ApiResponse>> Update(
+        Guid id, [FromBody] CreateEventRequest dto, CancellationToken ct)
+    {
+        await _mediator.Send(new UpdateEventCommand(id, dto), ct);
+        return Ok(ApiResponse.Ok("Event updated."));
+    }
+
     [HttpPatch("{id:guid}/status")]
     public async Task<ActionResult<ApiResponse>> UpdateStatus(
         Guid id, [FromBody] UpdateEventStatusRequest dto, CancellationToken ct)
     {
         if (!Enum.TryParse<EventStatus>(dto.Status, ignoreCase: true, out var parsed))
-            return BadRequest(ApiResponse.Fail(
-                $"Invalid event status '{dto.Status}'. Valid values: {string.Join(", ", Enum.GetNames<EventStatus>())}"));
+            throw new ClaudyGod.Domain.Exceptions.ValidationException(
+                new Dictionary<string, string[]>
+                {
+                    ["status"] = [$"Status must be one of: {string.Join(", ", Enum.GetNames<EventStatus>())}."]
+                });
 
         await _mediator.Send(new UpdateEventStatusCommand(id, parsed.ToString()), ct);
         return Ok(ApiResponse.Ok("Event status updated."));
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<ActionResult<ApiResponse>> Delete(Guid id, CancellationToken ct)
+    {
+        await _mediator.Send(new DeleteEventCommand(id), ct);
+        return Ok(ApiResponse.Ok("Event moved to trash."));
     }
 }
 

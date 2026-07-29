@@ -14,9 +14,9 @@ public record GetMediaQuery(int Page = 1, int PageSize = 20,
 public class GetMediaQueryHandler : IRequestHandler<GetMediaQuery, PaginatedResult<MediaItemDto>>
 {
     private readonly IApplicationDbContext _db;
-    private readonly IFileStorageService _storage;
+    private readonly IWebsiteStorageService _storage;
 
-    public GetMediaQueryHandler(IApplicationDbContext db, IFileStorageService storage)
+    public GetMediaQueryHandler(IApplicationDbContext db, IWebsiteStorageService storage)
     {
         _db = db;
         _storage = storage;
@@ -40,11 +40,14 @@ public class GetMediaQueryHandler : IRequestHandler<GetMediaQuery, PaginatedResu
             .Take(request.PageSize)
             .ToListAsync(ct);
 
+        // Link-created items (m.ExternalUrl set) carry an already-absolute
+        // YouTube/CDN URL — pass it through as-is instead of resolving it
+        // as an internal storage path, which is what uploaded files need.
         var dtos = items.Select(m => new MediaItemDto(
             m.Id, m.Title, m.Description, m.Type.ToString(),
             m.FileName, m.ContentType, m.FileSizeBytes,
-            _storage.GetPublicUrl(m.FilePath),
-            m.ThumbnailPath is not null ? _storage.GetPublicUrl(m.ThumbnailPath) : null,
+            m.ExternalUrl ?? _storage.GetPublicUrl(m.FilePath),
+            m.ThumbnailPath is null ? null : m.ExternalUrl is not null ? m.ThumbnailPath : _storage.GetPublicUrl(m.ThumbnailPath),
             m.ArtistName, m.AlbumName, m.DurationSeconds,
             m.IsPublished, m.ViewCount, m.DownloadCount, m.CreatedAt)).ToList();
 

@@ -1,0 +1,48 @@
+# Production operations
+
+## Required services
+
+- PostgreSQL is the system of record. Apply migrations before starting a new API image.
+- Redis backs cross-instance fixed-window rate limits. If Redis is unavailable, the API retains its local limiter and emits an error; `/health/ready` reports Redis as degraded.
+- Configure `OpenTelemetry__OtlpEndpoint` with the OTLP HTTP/gRPC endpoint for Seq, Datadog, Grafana, or an OpenTelemetry Collector. Set authentication headers with the standard `OTEL_EXPORTER_OTLP_HEADERS` environment variable.
+
+## Delivery guarantees
+
+Email requests and domain events are inserted into `OutboxMessages` in the same PostgreSQL transaction as their business record. Workers claim rows using PostgreSQL optimistic concurrency, retry with exponential backoff, and release expired claims after two minutes. Delivery is at-least-once: consumers of domain events must be idempotent, and an SMTP message can be duplicated if a process stops after SMTP accepts it but before PostgreSQL records completion.
+
+## Retention
+
+`DataRetentionWorker` runs on startup and then at `Retention:IntervalHours`. Defaults retain audit logs for 365 days and expired refresh tokens, abandoned upload sessions, and processed outbox rows for 30 days. Set these values from environment-specific policy; do not shorten audit retention without legal approval.
+
+## Minimum alerts
+
+Create central alerts for:
+
+- any `Outbox batch failed` or repeated `Outbox message ... delivery attempt ... failed` log;
+- Redis health degraded for five minutes or `Distributed rate limiting unavailable` on more than one instance;
+- `Scheduled data-retention pass failed`;
+- PostgreSQL readiness unhealthy;
+- HTTP 5xx rate above 1% for five minutes, or p95 latency above the service objective;
+- no telemetry received from an expected production instance for five minutes.
+
+## Integration tests
+
+`ClaudyGod.PostgresIntegration.Tests` starts disposable `postgres:16-alpine`, applies the real migrations, and verifies PostgreSQL-only behavior. Docker is required to execute this suite; GitHub Actions provides it automatically. Run locally with:
+
+```bash
+dotnet test tests/ClaudyGod.PostgresIntegration.Tests
+```
+
+The local pre-push hook runs this suite whenever Docker is available and otherwise warns while allowing GitHub Actions to enforce it. For release-critical local work, use `REQUIRE_INTEGRATION_TESTS=1 git push` to fail closed when Docker is unavailable.
+# Admin gateway authentication
+
+The Web Studio reaches this API only through the ClaudyGod admin gateway. Configure the same
+high-entropy secret in both deployments:
+
+- `AdminGateway__ApiKey` on `CGM-Backend`.
+- `CGM_API_KEY` on the admin/mobile Express API.
+
+Use at least 32 random bytes and rotate both values together. The backend rejects production
+startup when the gateway key is missing, is a placeholder, or is shorter than 32 bytes. Actor
+headers are trusted only after this service key authenticates successfully; sending
+`x-actor-id` or `x-actor-email` without the key never authenticates a request.

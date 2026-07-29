@@ -1,4 +1,5 @@
 using ClaudyGod.Application.Common.Interfaces;
+using ClaudyGod.Application.Common.Validators;
 using ClaudyGod.Application.Features.Blog.DTOs;
 using ClaudyGod.Domain.Entities;
 using FluentValidation;
@@ -14,8 +15,7 @@ public class UpdateBlogPostCommandValidator : AbstractValidator<UpdateBlogPostCo
     public UpdateBlogPostCommandValidator()
     {
         RuleFor(x => x.Request.Title).NotEmpty().MaximumLength(500);
-        RuleFor(x => x.Request.Slug).NotEmpty().MaximumLength(500)
-            .Matches("^[a-z0-9-]+$").WithMessage("Slug may only contain lowercase letters, numbers, and hyphens.");
+        RuleFor(x => x.Request.Slug).ValidSlug();
         RuleFor(x => x.Request.Content).NotEmpty();
     }
 }
@@ -35,6 +35,8 @@ public class UpdateBlogPostCommandHandler : IRequestHandler<UpdateBlogPostComman
 
         var r = request.Request;
         post.Update(r.Title, r.Slug, r.Content, r.Excerpt, r.AuthorName, r.CategoryId);
+
+        if (!string.IsNullOrWhiteSpace(r.FeaturedImageUrl)) post.SetFeaturedImage(r.FeaturedImageUrl);
 
         post.PostTags.Clear();
         if (r.TagIds?.Count > 0)

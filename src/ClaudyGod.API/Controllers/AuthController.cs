@@ -1,4 +1,6 @@
+using System.Security.Claims;
 using Asp.Versioning;
+using ClaudyGod.API.Attributes;
 using ClaudyGod.Application.Common.Models;
 using ClaudyGod.Application.Features.Auth.Commands;
 using ClaudyGod.Application.Features.Auth.DTOs;
@@ -13,105 +15,81 @@ namespace ClaudyGod.API.Controllers;
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/auth")]
 [EnableRateLimiting("auth")]
-public class AuthController : ControllerBase
+public sealed class AuthController : ControllerBase
 {
-    private const string RefreshTokenCookie = "cgm_rt";
+    private const string RefreshCookieName = "cgm_refresh_token";
     private readonly IMediator _mediator;
-    private readonly IConfiguration _config;
 
-    public AuthController(IMediator mediator, IConfiguration config)
-    {
-        _mediator = mediator;
-        _config = config;
-    }
+    public AuthController(IMediator mediator) => _mediator = mediator;
 
+    [AllowAnonymous]
     [HttpPost("register")]
     public async Task<ActionResult<ApiResponse<AuthResponseDto>>> Register(
-        [FromBody] RegisterRequestDto dto, CancellationToken ct)
+        [FromBody] RegisterRequestDto request, CancellationToken ct)
     {
-        var result = await _mediator.Send(new RegisterCommand(dto.Username, dto.Email, dto.Password), ct);
-        SetRefreshTokenCookie(result.RefreshToken, result.RefreshTokenExpiresAt);
+        var result = await _mediator.Send(
+            new RegisterCommand(request.Username, request.Email, request.Password), ct);
+        SetRefreshCookie(result);
         return Ok(ApiResponse<AuthResponseDto>.Ok(ToResponse(result), "Registration successful."));
     }
 
+    [AllowAnonymous]
     [HttpPost("login")]
     public async Task<ActionResult<ApiResponse<AuthResponseDto>>> Login(
-        [FromBody] LoginRequestDto dto, CancellationToken ct)
+        [FromBody] LoginRequestDto request, CancellationToken ct)
     {
-        var result = await _mediator.Send(new LoginCommand(dto.Email, dto.Password), ct);
-        SetRefreshTokenCookie(result.RefreshToken, result.RefreshTokenExpiresAt);
+        var result = await _mediator.Send(new LoginCommand(request.Email, request.Password), ct);
+        SetRefreshCookie(result);
         return Ok(ApiResponse<AuthResponseDto>.Ok(ToResponse(result), "Login successful."));
     }
 
+    [AllowAnonymous]
     [HttpPost("refresh")]
     public async Task<ActionResult<ApiResponse<AuthResponseDto>>> Refresh(CancellationToken ct)
     {
-        var refreshToken = Request.Cookies[RefreshTokenCookie];
-        if (string.IsNullOrEmpty(refreshToken))
-            return Unauthorized(ApiResponse.Fail("Session expired. Please log in again."));
+        if (!Request.Cookies.TryGetValue(RefreshCookieName, out var token) || string.IsNullOrWhiteSpace(token))
+            throw new UnauthorizedAccessException("A refresh token is required.");
 
-        var result = await _mediator.Send(new RefreshTokenCommand(refreshToken), ct);
-        SetRefreshTokenCookie(result.RefreshToken, result.RefreshTokenExpiresAt);
-        return Ok(ApiResponse<AuthResponseDto>.Ok(ToResponse(result)));
+        var result = await _mediator.Send(new RefreshTokenCommand(token), ct);
+        SetRefreshCookie(result);
+        return Ok(ApiResponse<AuthResponseDto>.Ok(ToResponse(result), "Token refreshed."));
     }
 
+    [AllowAnonymous]
     [HttpPost("logout")]
     public async Task<ActionResult<ApiResponse>> Logout(CancellationToken ct)
     {
-        var refreshToken = Request.Cookies[RefreshTokenCookie];
-        if (!string.IsNullOrEmpty(refreshToken))
-            await _mediator.Send(new RevokeTokenCommand(refreshToken), ct);
+        if (Request.Cookies.TryGetValue(RefreshCookieName, out var token) && !string.IsNullOrWhiteSpace(token))
+            await _mediator.Send(new RevokeTokenCommand(token), ct);
 
-        ClearRefreshTokenCookie();
-        return Ok(ApiResponse.Ok("Logged out successfully."));
+        Response.Cookies.Delete(RefreshCookieName, RefreshCookieOptions(DateTimeOffset.UnixEpoch));
+        return Ok(ApiResponse.Ok("Logged out."));
     }
 
     [Authorize]
     [HttpGet("me")]
-    public ActionResult<ApiResponse<object>> Me()
+    public ActionResult<ApiResponse<object>> Me() => Ok(ApiResponse<object>.Ok(new
     {
-        var userId   = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-                    ?? User.FindFirst("sub")?.Value;
-        var email    = User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
-                    ?? User.FindFirst("email")?.Value;
-        var username = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value
-                    ?? User.FindFirst("unique_name")?.Value;
-        var role     = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+        id = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub"),
+        email = User.FindFirstValue(ClaimTypes.Email) ?? User.FindFirstValue("email"),
+        username = User.FindFirstValue(ClaimTypes.Name) ?? User.FindFirstValue("unique_name"),
+        role = User.FindFirstValue(ClaimTypes.Role),
+    }));
 
-        return Ok(ApiResponse<object>.Ok(new { id = userId, email, username, role }));
-    }
+    private void SetRefreshCookie(AuthResult result) =>
+        Response.Cookies.Append(RefreshCookieName, result.RefreshToken,
+            RefreshCookieOptions(result.RefreshTokenExpiresAt));
 
-    // ── Helpers ─────────────────────────────────────────────────────────────
+    private static AuthResponseDto ToResponse(AuthResult result) =>
+        new(result.AccessToken, result.Role, result.AccessTokenExpiresAt);
 
-    private static AuthResponseDto ToResponse(AuthResult result)
+    private static CookieOptions RefreshCookieOptions(DateTimeOffset expires) => new()
     {
-        var expiryMinutes = 60;
-        return new AuthResponseDto(result.AccessToken, result.Role,
-            DateTime.UtcNow.AddMinutes(expiryMinutes));
-    }
-
-    private void SetRefreshTokenCookie(string token, DateTime expiresAt)
-    {
-        var isProd = HttpContext.RequestServices
-            .GetRequiredService<IWebHostEnvironment>().IsProduction();
-
-        Response.Cookies.Append(RefreshTokenCookie, token, new CookieOptions
-        {
-            HttpOnly  = true,
-            Secure    = isProd,                // HTTPS-only in production
-            SameSite  = SameSiteMode.Strict,   // CSRF protection
-            Expires   = expiresAt,
-            Path      = "/api/",               // scoped to API paths only
-        });
-    }
-
-    private void ClearRefreshTokenCookie() =>
-        Response.Cookies.Delete(RefreshTokenCookie, new CookieOptions
-        {
-            HttpOnly = true,
-            Secure   = HttpContext.RequestServices
-                           .GetRequiredService<IWebHostEnvironment>().IsProduction(),
-            SameSite = SameSiteMode.Strict,
-            Path     = "/api/",
-        });
+        HttpOnly = true,
+        Secure = true,
+        SameSite = SameSiteMode.Strict,
+        Expires = expires,
+        Path = "/api/v1.0/auth",
+        IsEssential = true,
+    };
 }

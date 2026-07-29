@@ -5,9 +5,15 @@ using ClaudyGod.Application;
 using ClaudyGod.Infrastructure;
 using ClaudyGod.Infrastructure.Persistence;
 using ClaudyGod.API.Middleware;
+using ClaudyGod.API.Filters;
+using ClaudyGod.API.Common;
+using ClaudyGod.API.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -16,6 +22,11 @@ using Serilog;
 using Serilog.Events;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using StackExchange.Redis;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
@@ -54,6 +65,25 @@ try
 
     var builder = WebApplication.CreateBuilder(args);
 
+    static bool IsPlaceholder(string? value) =>
+        string.IsNullOrWhiteSpace(value) ||
+        value.StartsWith("CHANGE-ME", StringComparison.OrdinalIgnoreCase);
+
+    if (builder.Environment.IsProduction())
+    {
+        if (IsPlaceholder(builder.Configuration.GetConnectionString("DefaultConnection")) ||
+            builder.Configuration.GetConnectionString("DefaultConnection")!.Contains("Password=CHANGE-ME", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("A production database connection string must be configured.");
+        if (IsPlaceholder(builder.Configuration["Jwt:Key"]))
+            throw new InvalidOperationException("A production JWT signing key must be configured.");
+        if (IsPlaceholder(builder.Configuration["Jwt:Issuer"]) || IsPlaceholder(builder.Configuration["Jwt:Audience"]))
+            throw new InvalidOperationException("Jwt:Issuer and Jwt:Audience must be configured in production.");
+        var adminGatewayApiKey = builder.Configuration["AdminGateway:ApiKey"];
+        if (IsPlaceholder(adminGatewayApiKey) || Encoding.UTF8.GetByteCount(adminGatewayApiKey!) < 32)
+            throw new InvalidOperationException(
+                "AdminGateway:ApiKey must be configured with at least 32 bytes in production.");
+    }
+
     // Serilog
     builder.Host.UseSerilog((ctx, lc) => lc
         .ReadFrom.Configuration(ctx.Configuration)
@@ -63,12 +93,37 @@ try
         .WriteTo.Console()
         .WriteTo.File("logs/log-.txt", rollingInterval: RollingInterval.Day, retainedFileCountLimit: 30));
 
+    var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
+    var serviceName = builder.Configuration["OpenTelemetry:ServiceName"] ?? "ClaudyGod.API";
+    if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+    {
+        var endpoint = new Uri(otlpEndpoint);
+        builder.Logging.AddOpenTelemetry(options =>
+        {
+            options.IncludeFormattedMessage = true;
+            options.IncludeScopes = true;
+            options.SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(serviceName));
+            options.AddOtlpExporter(exporter => exporter.Endpoint = endpoint);
+        });
+        builder.Services.AddOpenTelemetry()
+            .ConfigureResource(resource => resource.AddService(serviceName))
+            .WithTracing(tracing => tracing.AddAspNetCoreInstrumentation()
+                .AddHttpClientInstrumentation().AddOtlpExporter(exporter => exporter.Endpoint = endpoint))
+            .WithMetrics(metrics => metrics.AddAspNetCoreInstrumentation()
+                .AddHttpClientInstrumentation().AddRuntimeInstrumentation()
+                .AddOtlpExporter(exporter => exporter.Endpoint = endpoint));
+    }
+    else if (builder.Environment.IsProduction())
+    {
+        Log.Warning("OpenTelemetry:OtlpEndpoint is not configured; central telemetry export is disabled.");
+    }
+
     // Application + Infrastructure layers
     builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration);
 
     // Controllers
-    builder.Services.AddControllers()
+    builder.Services.AddControllers(options => options.Filters.Add<PaginationValidationFilter>())
         .AddJsonOptions(options =>
         {
             options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
@@ -78,34 +133,35 @@ try
         });
     builder.Services.Configure<ApiBehaviorOptions>(options =>
     {
+        // ExceptionMiddleware translates every thrown exception (FluentValidation
+        // failures, NotFoundException, etc.) into an RFC 7807 ProblemDetails body
+        // with a correlationId and an "errors" field-name -> messages map — that's
+        // this API's one true error shape, and lib/data/client.ts on the frontend
+        // already knows how to parse exactly that. [ApiController]'s automatic
+        // model-validation failures (e.g. an unparsable query enum) bypass the
+        // exception pipeline entirely, so without this override they'd return
+        // ASP.NET's default ValidationProblemDetails instead — same content type,
+        // but a different property set (no correlationId/instance) than every
+        // other error response. Build the identical shape here for consistency.
         options.InvalidModelStateResponseFactory = context =>
         {
-            var errors = context.ModelState
-                .Where(entry => entry.Value?.Errors.Count > 0)
+            var fieldErrors = context.ModelState
+                .Where(kvp => kvp.Value?.Errors.Count > 0)
                 .ToDictionary(
-                    entry => string.IsNullOrWhiteSpace(entry.Key) ? "request" : entry.Key,
-                    entry => entry.Value!.Errors
-                        .Select(error => string.IsNullOrWhiteSpace(error.ErrorMessage)
-                            ? "The supplied value is not valid."
-                            : error.ErrorMessage)
-                        .ToArray());
+                    kvp => kvp.Key,
+                    kvp => kvp.Value!.Errors.Select(e => e.ErrorMessage).ToArray());
 
-            var problem = new ProblemDetails
-            {
-                Type = "https://httpstatuses.io/400",
-                Title = "Please check the information you entered",
-                Status = StatusCodes.Status400BadRequest,
-                Detail = "Some information was missing or invalid. Correct the highlighted fields and try again.",
-                Instance = context.HttpContext.Request.Path
-            };
-            problem.Extensions["code"] = "INVALID_REQUEST";
-            problem.Extensions["errors"] = errors;
-            if (context.HttpContext.Items.TryGetValue(CorrelationIdMiddleware.HeaderName, out var correlationId))
-                problem.Extensions["correlationId"] = correlationId;
+            var problem = ApiProblemDetails.Create(
+                context.HttpContext,
+                StatusCodes.Status400BadRequest,
+                "INVALID_REQUEST",
+                "Please check the information you entered",
+                "Some information was missing or invalid. Correct the highlighted fields and try again.",
+                fieldErrors);
 
             return new BadRequestObjectResult(problem)
             {
-                ContentTypes = { "application/problem+json" }
+                ContentTypes = { "application/problem+json" },
             };
         };
     });
@@ -158,7 +214,7 @@ try
     {
         options.AddPolicy("AllowFrontend", policy =>
             policy.WithOrigins(allowedOrigins)
-                  .WithHeaders("Content-Type", "Authorization", "Accept", "X-Requested-With", "X-CSRF-Token", "X-API-Key")
+                  .WithHeaders("Content-Type", "Authorization", "Accept", "X-Requested-With", "X-CSRF-Token")
                   .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
                   .AllowCredentials()
                   .SetPreflightMaxAge(TimeSpan.FromMinutes(10)));
@@ -171,7 +227,22 @@ try
     if (System.Text.Encoding.UTF8.GetByteCount(jwtKey) < 32)
         throw new InvalidOperationException("Jwt:Key must be at least 32 bytes for HmacSha256.");
 
-    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    const string adminOrBearerScheme = "AdminGatewayOrBearer";
+    builder.Services.AddAuthentication(options =>
+        {
+            options.DefaultScheme = adminOrBearerScheme;
+            options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+        })
+        .AddPolicyScheme(adminOrBearerScheme, adminOrBearerScheme, options =>
+        {
+            options.ForwardDefaultSelector = context =>
+                context.Request.Headers.ContainsKey(AdminGatewayAuthenticationHandler.ApiKeyHeader)
+                    ? AdminGatewayAuthenticationHandler.SchemeName
+                    : JwtBearerDefaults.AuthenticationScheme;
+        })
+        .AddScheme<AuthenticationSchemeOptions, AdminGatewayAuthenticationHandler>(
+            AdminGatewayAuthenticationHandler.SchemeName,
+            _ => { })
         .AddJwtBearer(options =>
         {
             options.TokenValidationParameters = new TokenValidationParameters
@@ -185,9 +256,79 @@ try
                 ValidateLifetime = true,
                 ClockSkew = TimeSpan.Zero
             };
+            options.Events = new JwtBearerEvents
+            {
+                OnChallenge = async context =>
+                {
+                    context.HandleResponse();
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    context.Response.ContentType = "application/problem+json";
+                    await context.Response.WriteAsJsonAsync(ApiProblemDetails.Create(
+                        context.HttpContext,
+                        StatusCodes.Status401Unauthorized,
+                        "AUTHENTICATION_REQUIRED",
+                        "Authentication required",
+                        "Sign in with a valid account to access this resource."));
+                },
+                OnForbidden = async context =>
+                {
+                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    context.Response.ContentType = "application/problem+json";
+                    await context.Response.WriteAsJsonAsync(ApiProblemDetails.Create(
+                        context.HttpContext,
+                        StatusCodes.Status403Forbidden,
+                        "ACCESS_DENIED",
+                        "Access denied",
+                        "Your account does not have permission to perform this action."));
+                },
+            };
         });
 
-    builder.Services.AddAuthorization();
+    builder.Services.AddAuthorization(options =>
+    {
+        // Secure-by-default: any endpoint not explicitly marked [AllowAnonymous]
+        // is an administrative endpoint and requires an authenticated admin role.
+        options.FallbackPolicy = new AuthorizationPolicyBuilder()
+            .RequireAuthenticatedUser()
+            .RequireRole("Admin", "SuperAdmin")
+            .Build();
+    });
+
+    // Forwarded headers are accepted only from explicitly trusted proxies.
+    // Without this allow-list, client-supplied X-Forwarded-For values are ignored.
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
+    {
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        options.ForwardLimit = 1;
+        options.KnownNetworks.Clear();
+        options.KnownProxies.Clear();
+
+        foreach (var value in builder.Configuration.GetSection("ReverseProxy:KnownProxies").Get<string[]>() ?? [])
+        {
+            if (!System.Net.IPAddress.TryParse(value, out var address))
+                throw new InvalidOperationException($"ReverseProxy:KnownProxies contains invalid IP address '{value}'.");
+            options.KnownProxies.Add(address);
+        }
+
+        foreach (var value in builder.Configuration.GetSection("ReverseProxy:KnownNetworks").Get<string[]>() ?? [])
+        {
+            var parts = value.Split('/', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length != 2 || !System.Net.IPAddress.TryParse(parts[0], out var prefix) ||
+                !int.TryParse(parts[1], out var prefixLength) || prefixLength < 0 ||
+                prefixLength > (prefix.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork ? 32 : 128))
+                throw new InvalidOperationException(
+                    $"ReverseProxy:KnownNetworks contains invalid CIDR network '{value}'.");
+
+            options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(prefix, prefixLength));
+        }
+    });
+
+    if (builder.Environment.IsProduction() &&
+        (builder.Configuration.GetSection("ReverseProxy:KnownProxies").Get<string[]>()?.Length ?? 0) == 0 &&
+        (builder.Configuration.GetSection("ReverseProxy:KnownNetworks").Get<string[]>()?.Length ?? 0) == 0)
+    {
+        Log.Warning("No trusted reverse proxy is configured. Forwarded client IPs will be ignored and per-IP rate limits may group traffic by proxy address.");
+    }
 
     // Redis distributed cache
     var redisConn = builder.Configuration["Redis:ConnectionString"] ?? "localhost:6379";
@@ -197,15 +338,20 @@ try
         options.Configuration = redisConn;
         options.InstanceName = redisInstance;
     });
+    var redisOptions = ConfigurationOptions.Parse(redisConn);
+    redisOptions.AbortOnConnectFail = false;
+    redisOptions.ConnectRetry = 2;
+    redisOptions.ConnectTimeout = 2000;
+    redisOptions.AsyncTimeout = 2000;
+    builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisOptions));
 
-    // Health checks — both DB and Redis are Degraded (not Unhealthy) so that
-    // /healthz always returns HTTP 200. Traefik uses this endpoint to decide
-    // whether to route traffic; Unhealthy → 503 → Traefik returns 502 to users.
+    // PostgreSQL is required for readiness; Redis is an optional cache and may
+    // degrade without removing an otherwise functional instance from service.
     builder.Services.AddHealthChecks()
         .AddNpgSql(
             builder.Configuration.GetConnectionString("DefaultConnection")!,
             name: "database",
-            failureStatus: HealthStatus.Degraded,
+            failureStatus: HealthStatus.Unhealthy,
             tags: ["db"])
         .AddRedis(
             redisConn,
@@ -217,14 +363,15 @@ try
     var permitLimit = builder.Configuration.GetValue<int>("RateLimit:PermitLimit", 100);
     var windowSeconds = builder.Configuration.GetValue<int>("RateLimit:WindowSeconds", 60);
 
+    static string ClientKey(HttpContext context) =>
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
     builder.Services.AddRateLimiter(options =>
     {
         // Global per-IP limiter
         options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
         {
-            var ip = ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
-                     ?? ctx.Connection.RemoteIpAddress?.ToString()
-                     ?? "unknown";
+            var ip = ClientKey(ctx);
             return RateLimitPartition.GetFixedWindowLimiter(ip, _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = permitLimit,
@@ -237,9 +384,7 @@ try
         // Strict limiter for AI endpoints — 10 requests/minute per IP
         options.AddPolicy("ai", ctx =>
         {
-            var ip = ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
-                     ?? ctx.Connection.RemoteIpAddress?.ToString()
-                     ?? "unknown";
+            var ip = ClientKey(ctx);
             return RateLimitPartition.GetFixedWindowLimiter($"ai:{ip}", _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 10,
@@ -252,9 +397,7 @@ try
         // Strict limiter for auth endpoints — 10 attempts/5 minutes per IP
         options.AddPolicy("auth", ctx =>
         {
-            var ip = ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
-                     ?? ctx.Connection.RemoteIpAddress?.ToString()
-                     ?? "unknown";
+            var ip = ClientKey(ctx);
             return RateLimitPartition.GetFixedWindowLimiter($"auth:{ip}", _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 10,
@@ -264,13 +407,25 @@ try
             });
         });
 
-        // Newsletter submissions are intentionally public, but tightly limited to
-        // reduce automated sign-up abuse without exposing a secret to the browser.
+        // Comment/like endpoints — anonymous, public, no login gate, so this is
+        // the main spam/abuse defense besides the honeypot field on create.
+        // 8 comments/10 minutes per IP is generous for a real visitor, tight
+        // enough to blunt a scripted burst.
+        options.AddPolicy("comments", ctx =>
+        {
+            var ip = ClientKey(ctx);
+            return RateLimitPartition.GetFixedWindowLimiter($"comments:{ip}", _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 8,
+                Window = TimeSpan.FromMinutes(10),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+        });
+
         options.AddPolicy("subscription", ctx =>
         {
-            var ip = ctx.Request.Headers["CF-Connecting-IP"].FirstOrDefault()
-                     ?? ctx.Connection.RemoteIpAddress?.ToString()
-                     ?? "unknown";
+            var ip = ClientKey(ctx);
             return RateLimitPartition.GetFixedWindowLimiter($"subscription:{ip}", _ => new FixedWindowRateLimiterOptions
             {
                 PermitLimit = 5,
@@ -280,19 +435,44 @@ try
             });
         });
 
+        options.AddPolicy("public-form", ctx =>
+        {
+            var ip = ClientKey(ctx);
+            return RateLimitPartition.GetFixedWindowLimiter($"public-form:{ip}", _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(10),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+        });
+
+        options.AddPolicy("commerce", ctx =>
+        {
+            var ip = ClientKey(ctx);
+            return RateLimitPartition.GetFixedWindowLimiter($"commerce:{ip}", _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(5),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+        });
+
         options.OnRejected = async (ctx, token) =>
         {
             ctx.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
-            ctx.HttpContext.Response.ContentType = "application/json";
+            ctx.HttpContext.Response.ContentType = "application/problem+json";
             var retryAfter = ctx.Lease.TryGetMetadata(MetadataName.RetryAfter, out var r) ? (int)r.TotalSeconds : 60;
             ctx.HttpContext.Response.Headers["Retry-After"] = retryAfter.ToString();
-            var json = JsonSerializer.Serialize(new
-            {
-                success = false,
-                code = "TOO_MANY_REQUESTS",
-                message = "You have made too many requests. Please wait a little while and try again.",
-                retryAfterSeconds = retryAfter
-            });
+            var problem = ApiProblemDetails.Create(
+                ctx.HttpContext,
+                StatusCodes.Status429TooManyRequests,
+                "TOO_MANY_REQUESTS",
+                "Too many requests",
+                "You have made too many requests. Please wait a little while and try again.");
+            problem.Extensions["retryAfterSeconds"] = retryAfter;
+            var json = JsonSerializer.Serialize(problem);
             await ctx.HttpContext.Response.WriteAsync(json, token);
         };
     });
@@ -303,6 +483,10 @@ try
     builder.Services.AddProblemDetails();
 
     var app = builder.Build();
+
+    // Must run before anything reads scheme or client IP. Only configured
+    // KnownProxies are trusted by ForwardedHeadersOptions above.
+    app.UseForwardedHeaders();
 
     // Correlation ID must be first so every subsequent middleware and log has the ID
     app.UseMiddleware<CorrelationIdMiddleware>();
@@ -323,13 +507,19 @@ try
         app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "ClaudyGod API v1"));
     }
 
-    app.UseMiddleware<SecurityHeadersMiddleware>();
+    // Resolve endpoints before CORS and authorization evaluate their metadata.
+    app.UseRouting();
+
+    // CORS runs before authentication so preflight requests are handled cleanly.
+    app.UseCors("AllowFrontend");
+
     app.UseMiddleware<ExceptionMiddleware>();
+    app.UseMiddleware<SecurityHeadersMiddleware>();
 
     app.UseHttpsRedirection();
     app.UseStaticFiles();
 
-    app.UseCors("AllowFrontend");
+    app.UseMiddleware<DistributedRateLimitMiddleware>();
     app.UseRateLimiter();
 
     app.UseAuthentication();
@@ -337,35 +527,56 @@ try
 
     app.MapControllers();
 
-    // Health check endpoint
+    static async Task WriteHealthResponse(HttpContext context, HealthReport report)
+    {
+        context.Response.ContentType = "application/json";
+        var result = JsonSerializer.Serialize(new
+        {
+            status = report.Status.ToString().ToLowerInvariant(),
+            timestamp = DateTime.UtcNow,
+            checks = report.Entries.Select(e => new
+            {
+                name = e.Key,
+                status = e.Value.Status.ToString().ToLowerInvariant(),
+                duration = e.Value.Duration.TotalMilliseconds
+            })
+        });
+        await context.Response.WriteAsync(result);
+    }
+
+    // Liveness answers only whether the process can serve HTTP. Readiness
+    // includes dependencies and returns 503 when PostgreSQL is unavailable.
+    app.MapHealthChecks("/health/live", new HealthCheckOptions
+    {
+        Predicate = _ => false,
+        ResponseWriter = WriteHealthResponse,
+    }).AllowAnonymous();
+    app.MapHealthChecks("/health/ready", new HealthCheckOptions
+    {
+        ResponseWriter = WriteHealthResponse,
+    }).AllowAnonymous();
     app.MapHealthChecks("/healthz", new HealthCheckOptions
     {
-        ResponseWriter = async (context, report) =>
-        {
-            context.Response.ContentType = "application/json";
-            var result = JsonSerializer.Serialize(new
-            {
-                status = report.Status.ToString().ToLower(),
-                timestamp = DateTime.UtcNow,
-                checks = report.Entries.Select(e => new
-                {
-                    name = e.Key,
-                    status = e.Value.Status.ToString().ToLower(),
-                    duration = e.Value.Duration.TotalMilliseconds
-                })
-            });
-            await context.Response.WriteAsync(result);
-        }
-    });
+        ResponseWriter = WriteHealthResponse,
+    }).AllowAnonymous();
 
     Log.Information("ClaudyGod API starting...");
     await app.RunAsync();
 }
+catch (HostAbortedException)
+{
+    // Expected control flow used by EF tooling and WebApplicationFactory while
+    // resolving the application's service provider. It must not be swallowed.
+    throw;
+}
 catch (Exception ex)
 {
     Log.Fatal(ex, "Application terminated unexpectedly");
+    throw;
 }
 finally
 {
     Log.CloseAndFlush();
 }
+
+public partial class Program;

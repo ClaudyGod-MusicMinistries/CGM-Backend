@@ -1,10 +1,10 @@
 using Asp.Versioning;
+using ClaudyGod.API.Attributes;
 using ClaudyGod.Application.Common.Models;
 using ClaudyGod.Application.Features.PrayerRequests.Commands;
 using ClaudyGod.Application.Features.PrayerRequests.Queries;
 using ClaudyGod.Domain.Enums;
 using MediatR;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClaudyGod.API.Controllers;
@@ -18,6 +18,8 @@ public class PrayerRequestController : ControllerBase
 
     public PrayerRequestController(IMediator mediator) => _mediator = mediator;
 
+    [PublicEndpoint]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("public-form")]
     [HttpPost]
     public async Task<ActionResult<ApiResponse<object>>> Submit(
         [FromBody] SubmitPrayerRequestDto dto, CancellationToken ct)
@@ -27,7 +29,6 @@ public class PrayerRequestController : ControllerBase
         return Ok(ApiResponse<object>.Ok(new { id }, "Prayer request submitted. We will intercede for you."));
     }
 
-    [Authorize(Roles = "Admin,SuperAdmin")]
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PaginatedResult<PrayerRequestDto>>>> GetAll(
         [FromQuery] int page = 1, [FromQuery] int pageSize = 20,
@@ -37,6 +38,13 @@ public class PrayerRequestController : ControllerBase
     {
         var result = await _mediator.Send(new GetPrayerRequestsQuery(page, pageSize, status, includeConfidential), ct);
         return Ok(ApiResponse<PaginatedResult<PrayerRequestDto>>.Ok(result));
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<ActionResult<ApiResponse>> Delete(Guid id, CancellationToken ct)
+    {
+        await _mediator.Send(new DeletePrayerRequestCommand(id), ct);
+        return Ok(ApiResponse.Ok("Prayer request moved to trash."));
     }
 }
 

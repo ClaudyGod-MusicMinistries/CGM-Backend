@@ -5,7 +5,6 @@ using ClaudyGod.Application.Features.Media.DTOs;
 using ClaudyGod.Application.Features.Media.Queries;
 using ClaudyGod.Domain.Enums;
 using MediatR;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClaudyGod.API.Controllers;
@@ -19,6 +18,7 @@ public class MediaController : ControllerBase
 
     public MediaController(IMediator mediator) => _mediator = mediator;
 
+    [Microsoft.AspNetCore.Authorization.AllowAnonymous]
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PaginatedResult<MediaItemDto>>>> GetAll(
         [FromQuery] int page = 1, [FromQuery] int pageSize = 20,
@@ -26,40 +26,68 @@ public class MediaController : ControllerBase
         [FromQuery] bool? isPublished = null,
         CancellationToken ct = default)
     {
-        var mediaType = ParseMediaType(type);
-        var result = await _mediator.Send(new GetMediaQuery(page, pageSize, mediaType, isPublished), ct);
+        var parsedType = ParseMediaType(type);
+
+        var result = await _mediator.Send(new GetMediaQuery(page, pageSize, parsedType, isPublished), ct);
         return Ok(ApiResponse<PaginatedResult<MediaItemDto>>.Ok(result));
     }
 
     private static MediaType? ParseMediaType(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value))
-            return null;
+        if (string.IsNullOrWhiteSpace(value)) return null;
 
         var normalized = value.Trim().Replace("-", string.Empty).Replace("_", string.Empty);
-        if (normalized.Equals("video", StringComparison.OrdinalIgnoreCase))
-            return MediaType.SermonVideo;
-        if (normalized.Equals("audio", StringComparison.OrdinalIgnoreCase))
-            return MediaType.SermonAudio;
-
-        if (Enum.TryParse<MediaType>(normalized, true, out var mediaType) &&
-            Enum.IsDefined(mediaType))
+        if (normalized.Equals("video", StringComparison.OrdinalIgnoreCase)) return MediaType.SermonVideo;
+        if (normalized.Equals("audio", StringComparison.OrdinalIgnoreCase)) return MediaType.SermonAudio;
+        if (Enum.TryParse<MediaType>(normalized, true, out var mediaType) && Enum.IsDefined(mediaType))
             return mediaType;
 
         throw new ClaudyGod.Domain.Exceptions.ValidationException(
-            new Dictionary<string, string[]>
-            {
-                ["type"] = ["Choose one of: video, audio, music, photo, or other."]
-            });
+            new Dictionary<string, string[]> { ["type"] = ["Choose one of: video, audio, music, photo, or other."] });
     }
 
-    [Authorize(Roles = "Admin,SuperAdmin")]
+    /// <summary>
+    /// Creates a MediaItem from an already-confirmed upload session — the file
+    /// bytes landed in S3 during StorageController's confirm step, not here.
+    /// See CreateMediaFromUploadCommand.
+    /// </summary>
     [HttpPost]
-    [RequestSizeLimit(500 * 1024 * 1024)]
-    public async Task<ActionResult<ApiResponse<object>>> Upload(
-        [FromForm] UploadMediaRequest dto, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<object>>> Create(
+        [FromBody] CreateMediaFromUploadRequest dto, CancellationToken ct)
     {
-        var id = await _mediator.Send(new UploadMediaCommand(dto), ct);
-        return Ok(ApiResponse<object>.Ok(new { id }, "Media uploaded successfully."));
+        var id = await _mediator.Send(new CreateMediaFromUploadCommand(dto), ct);
+        return Ok(ApiResponse<object>.Ok(new { id }, "Media created successfully."));
+    }
+
+    /// <summary>
+    /// Registers externally-hosted media (a YouTube link, etc.) with no file
+    /// upload — for video content that lives on YouTube rather than in our
+    /// own storage. See <see cref="Upload"/> for real file uploads.
+    /// </summary>
+    [HttpPost("link")]
+    public async Task<ActionResult<ApiResponse<object>>> CreateLink(
+        [FromBody] CreateMediaLinkRequest dto, CancellationToken ct)
+    {
+        var id = await _mediator.Send(new CreateMediaLinkCommand(dto), ct);
+        return Ok(ApiResponse<object>.Ok(new { id }, "Media link created successfully."));
+    }
+
+    /// <summary>
+    /// Edits a link-created item's metadata. Real uploaded files have no
+    /// update path — their binary content is immutable, only Delete applies.
+    /// </summary>
+    [HttpPut("link/{id:guid}")]
+    public async Task<ActionResult<ApiResponse>> UpdateLink(
+        Guid id, [FromBody] CreateMediaLinkRequest dto, CancellationToken ct)
+    {
+        await _mediator.Send(new UpdateMediaLinkCommand(id, dto), ct);
+        return Ok(ApiResponse.Ok("Media link updated."));
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<ActionResult<ApiResponse>> Delete(Guid id, CancellationToken ct)
+    {
+        await _mediator.Send(new DeleteMediaCommand(id), ct);
+        return Ok(ApiResponse.Ok("Media item deleted."));
     }
 }

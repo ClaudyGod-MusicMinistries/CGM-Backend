@@ -1,11 +1,11 @@
 using Asp.Versioning;
+using ClaudyGod.API.Attributes;
 using ClaudyGod.Application.Common.Models;
 using ClaudyGod.Application.Features.Bookings.Commands;
 using ClaudyGod.Application.Features.Bookings.DTOs;
 using ClaudyGod.Application.Features.Bookings.Queries;
 using ClaudyGod.Domain.Enums;
 using MediatR;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace ClaudyGod.API.Controllers;
@@ -19,6 +19,8 @@ public class BookingController : ControllerBase
 
     public BookingController(IMediator mediator) => _mediator = mediator;
 
+    [PublicEndpoint]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("public-form")]
     [HttpPost]
     public async Task<ActionResult<ApiResponse<object>>> Create(
         [FromBody] CreateBookingRequest dto, CancellationToken ct)
@@ -27,7 +29,6 @@ public class BookingController : ControllerBase
         return Ok(ApiResponse<object>.Ok(new { id }, "Booking request submitted successfully."));
     }
 
-    [Authorize(Roles = "Admin,SuperAdmin")]
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PaginatedResult<BookingDto>>>> GetAll(
         [FromQuery] int page = 1, [FromQuery] int pageSize = 20,
@@ -37,12 +38,18 @@ public class BookingController : ControllerBase
         return Ok(ApiResponse<PaginatedResult<BookingDto>>.Ok(result));
     }
 
-    [Authorize(Roles = "Admin,SuperAdmin")]
     [HttpPatch("{id:guid}/status")]
     public async Task<ActionResult<ApiResponse>> UpdateStatus(
         Guid id, [FromBody] UpdateBookingStatusRequest dto, CancellationToken ct)
     {
         await _mediator.Send(new UpdateBookingStatusCommand(id, dto.Status, dto.AdminNotes), ct);
         return Ok(ApiResponse.Ok("Booking status updated."));
+    }
+
+    [HttpDelete("{id:guid}")]
+    public async Task<ActionResult<ApiResponse>> Delete(Guid id, CancellationToken ct)
+    {
+        await _mediator.Send(new DeleteBookingCommand(id), ct);
+        return Ok(ApiResponse.Ok("Booking moved to trash."));
     }
 }

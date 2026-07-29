@@ -25,9 +25,14 @@ public interface IApplicationDbContext
     DbSet<AuditLog> AuditLogs { get; }
     DbSet<Reel> Reels { get; }
     DbSet<Album> Albums { get; }
+    DbSet<Product> Products { get; }
     DbSet<Order> Orders { get; }
     DbSet<PaystackPayment> PaystackPayments { get; }
     DbSet<FAQ> FAQs { get; }
+    DbSet<Comment> Comments { get; }
+    DbSet<Reaction> Reactions { get; }
+    DbSet<UploadSession> UploadSessions { get; }
+    DbSet<OutboxMessage> OutboxMessages { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

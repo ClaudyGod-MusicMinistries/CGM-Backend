@@ -2,188 +2,222 @@ name: Build & Push API → GHCR
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
   workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ghcr.io/claudygod-musicministries/cgm-api
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # ─── Test ─────────────────────────────────────────────────────────────────────
-  # ubuntu-latest ships with .NET 8 — no actions/setup-dotnet needed
-  # (actions/setup-dotnet@* is not in the org's allowed-actions list)
   test:
     name: Run unit tests
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GH_PAT }}
-
-      - name: Verify .NET version
-        run: dotnet --version
-
-      - name: Restore
-        run: dotnet restore ClaudyGod.sln
-
-      - name: Build (no-restore)
-        run: dotnet build ClaudyGod.sln --no-restore -c Release
-
-      - name: Test
-        run: dotnet test ClaudyGod.sln --no-build -c Release --logger "console;verbosity=normal" --results-directory TestResults
-
-  # ─── Build + Push ────────────────────────────────────────────────────────────
-  build:
-    name: Build & push image
-    needs: test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
-    outputs:
-      short-sha: ${{ steps.sha.outputs.short }}
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GH_PAT }}
+          # The default GITHUB_TOKEN is sufficient to check out this repository.
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
 
-      - name: Short SHA
+      - name: Setup .NET 8
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # ubuntu-latest normally includes .NET 8.
+          # Install it only when dotnet is unavailable.
+          if ! command -v dotnet >/dev/null 2>&1; then
+            echo "❌ dotnet not found — installing .NET 8 SDK"
+
+            curl \
+              --fail \
+              --silent \
+              --show-error \
+              --location \
+              https://dot.net/v1/dotnet-install.sh \
+              --output /tmp/dotnet-install.sh
+
+            bash /tmp/dotnet-install.sh \
+              --channel 8.0 \
+              --install-dir "$HOME/.dotnet"
+
+            echo "$HOME/.dotnet" >> "$GITHUB_PATH"
+            export PATH="$HOME/.dotnet:$PATH"
+          fi
+
+          dotnet --version
+          dotnet --list-sdks
+
+      - name: Restore dependencies
+        run: dotnet restore ClaudyGod.sln
+
+      - name: Verify formatting
+        run: dotnet format ClaudyGod.sln --no-restore --verify-no-changes
+
+      - name: Audit dependency graph
+        run: >-
+          dotnet list ClaudyGod.sln package
+          --vulnerable
+          --include-transitive
+
+      - name: Build
+        run: dotnet build ClaudyGod.sln --no-restore --configuration Release
+
+      - name: Test
+        run: >-
+          dotnet test ClaudyGod.sln
+          --no-build
+          --configuration Release
+          --logger "console;verbosity=normal"
+          --collect:"XPlat Code Coverage"
+          --results-directory TestResults
+
+      - name: Upload test and coverage results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results-${{ github.run_id }}
+          path: TestResults
+          if-no-files-found: warn
+          retention-days: 14
+
+  # ─── Build + Push ────────────────────────────────────────────────────────────
+  build:
+    name: Build & push image
+    needs: test
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # The default GITHUB_TOKEN is sufficient to check out this repository.
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
+
+      - name: Get short SHA
         id: sha
-        run: echo "short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
-        run: |
-          docker buildx create --use --name cgm-builder --driver docker-container
-          docker buildx inspect --bootstrap
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+          driver-opts: |
+            image=moby/buildkit:latest
+            network=host
 
-      - name: Log in to GHCR
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | \
-            docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
-        run: |
-          SHORT_SHA="${{ steps.sha.outputs.short }}"
-          IS_MAIN="${{ github.ref == 'refs/heads/main' }}"
-          IS_PR="${{ github.event_name == 'pull_request' }}"
-          PR_NUM="${{ github.event.number }}"
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+            type=ref,event=pr,prefix=pr-
 
-          # Build tag list
-          TAGS="--tag ${{ env.IMAGE_NAME }}:sha-${SHORT_SHA}"
-          if [ "$IS_MAIN" = "true" ]; then
-            TAGS="$TAGS --tag ${{ env.IMAGE_NAME }}:latest"
-          fi
-          if [ "$IS_PR" = "true" ]; then
-            TAGS="$TAGS --tag ${{ env.IMAGE_NAME }}:pr-${PR_NUM}"
-          fi
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          load: ${{ github.event_name == 'pull_request' }}
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-          # Only push on non-PR builds
-          PUSH_FLAG="--push"
-          if [ "$IS_PR" = "true" ]; then
-            PUSH_FLAG="--load"
-          fi
-
-          docker buildx build \
-            --platform linux/amd64 \
-            --file Dockerfile \
-            --cache-from type=gha \
-            --cache-to   type=gha,mode=max \
-            --label "org.opencontainers.image.title=ClaudyGod API" \
-            --label "org.opencontainers.image.description=ClaudyGod Music Ministry – .NET 8 REST API" \
-            --label "org.opencontainers.image.vendor=ClaudyGod-MusicMinistries" \
-            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
-            $TAGS $PUSH_FLAG \
-            .
-
-      # ── Run migrations from the CI runner (has direct internet to Supabase) ──
-      # The VPS Docker daemon has DNS issues that cause VPS-side migrations to
-      # time out. Running here on the ubuntu-latest runner guarantees connectivity.
-      - name: Run database migrations
+      # ── Hand off to the infrastructure repository ─────────────────────────────
+      # ClaudyGodweb-Infrastructure is the source of truth for production.
+      # It owns Docker Compose, deployment, and database migration execution.
+      - name: Trigger deploy in ClaudyGodweb-Infrastructure
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         env:
-          # Bind the secret to a step-level env var so the shell handles it as
-          # a variable (not inline text), which is safe for values with semicolons.
-          MIGRATE_CONN: ${{ secrets.MIGRATE_CONNECTION_STRING }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+        shell: bash
         run: |
-          if [ -z "$MIGRATE_CONN" ]; then
-            echo "❌ MIGRATE_CONNECTION_STRING secret is not set."
-            echo ""
-            echo "Add it in GitHub → CGM-Backend → Settings → Secrets and variables → Actions → New repository secret"
-            echo ""
-            echo "  Name:  MIGRATE_CONNECTION_STRING"
-            echo "  Value: Host=aws-1-eu-central-1.pooler.supabase.com;Port=5432;Database=postgres;Username=postgres.ktzhbaqumdvypegnsgok;Password=ClaudyGod@2026;Ssl Mode=Require;Trust Server Certificate=true;Pooling=false;Timeout=60;Application Name=cgm_migrate"
-            echo ""
-            echo "Then re-run this workflow."
+          set -euo pipefail
+
+          if [ -z "${GH_PAT:-}" ]; then
+            echo "❌ GH_PAT secret is not set."
+            echo "The token needs access to ClaudyGodweb-Infrastructure."
+            echo "Add it under:"
+            echo "CGM-Backend → Settings → Secrets and variables → Actions"
             exit 1
           fi
 
-          echo "→ Pulling image for migration run..."
-          docker pull ${{ env.IMAGE_NAME }}:sha-${{ steps.sha.outputs.short }}
+          TAG="sha-${{ steps.sha.outputs.short }}"
 
-          echo "→ Applying EF Core migrations against Supabase..."
-          docker run --rm \
-            -e ASPNETCORE_ENVIRONMENT=Production \
-            -e "ConnectionStrings__DefaultConnection=${MIGRATE_CONN}" \
-            ${{ env.IMAGE_NAME }}:sha-${{ steps.sha.outputs.short }} \
-            --migrate
+          echo "→ Dispatching deploy-api with image tag: ${TAG}"
 
-          echo "✓ Migrations applied"
+          http_code="$(
+            curl \
+              --silent \
+              --show-error \
+              --output /tmp/dispatch_response.json \
+              --write-out "%{http_code}" \
+              --request POST \
+              --header "Authorization: Bearer ${GH_PAT}" \
+              --header "Accept: application/vnd.github+json" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              https://api.github.com/repos/ClaudyGod-MusicMinistries/ClaudyGodweb-Infrastructure/dispatches \
+              --data "{\"event_type\":\"deploy-api\",\"client_payload\":{\"service\":\"api\",\"tag\":\"${TAG}\"}}"
+          )"
 
-      - name: Summary
+          if [ "$http_code" != "204" ]; then
+            echo "❌ Repository dispatch failed with HTTP ${http_code}."
+
+            if [ -s /tmp/dispatch_response.json ]; then
+              cat /tmp/dispatch_response.json
+            fi
+
+            exit 1
+          fi
+
+          echo "✓ Deployment dispatched successfully."
+          echo "✓ Infrastructure will deploy ${TAG} and run migrations."
+
+      - name: Build summary
         if: github.event_name != 'pull_request'
+        shell: bash
         run: |
-          echo "### ✅ API image pushed to GHCR" >> $GITHUB_STEP_SUMMARY
-          echo "| Key | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Image | \`${{ env.IMAGE_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Tags | \`latest\`, \`sha-${{ steps.sha.outputs.short }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| Migrations | ✅ Applied from CI runner |" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "### ✅ API image pushed to GHCR"
+            echo
+            echo "| Detail | Value |"
+            echo "| --- | --- |"
+            echo "| Image | \`${{ env.IMAGE_NAME }}\` |"
+            echo "| SHA | \`${{ steps.sha.outputs.short }}\` |"
 
-  # ─── SSH deploy to production server ─────────────────────────────────────────
-  deploy:
-    name: Deploy API to production
-    needs: build
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    environment: production
-
-    steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT || 22 }}
-          timeout: 180s
-          script: |
-            set -e
-            export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
-            DEPLOY_PATH="$(echo '${{ secrets.VPS_DEPLOY_PATH }}' | tr -d '[:space:]')"
-            cd "$DEPLOY_PATH"
-
-            # Pull latest infra scripts (force local to match remote)
-            git fetch origin main && git reset --hard origin/main || true
-
-            # Authenticate to GHCR
-            echo "${{ secrets.GITHUB_TOKEN }}" | \
-              docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
-            # Migrations already ran in CI — just pull and restart the API
-            export TAG="sha-${{ needs.build.outputs.short-sha }}"
-            COMPOSE="docker compose --env-file $DEPLOY_PATH/.env --project-directory $DEPLOY_PATH -f $DEPLOY_PATH/docker/docker-compose.yml"
-
-            echo "→ Pulling API image (tag: $TAG)..."
-            $COMPOSE pull api
-
-            echo "→ Restarting API..."
-            $COMPOSE up -d --no-deps --remove-orphans api
-
-            docker image prune -f --filter "until=24h" >/dev/null
-            echo "✓ API deploy complete — $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            if [ "${{ github.ref }}" = "refs/heads/main" ] &&
+               [ "${{ github.event_name }}" = "push" ]; then
+              echo "| Deploy | ➡️ Dispatched to ClaudyGodweb-Infrastructure |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

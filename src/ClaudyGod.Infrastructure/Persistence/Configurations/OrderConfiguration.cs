@@ -29,10 +29,21 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(o => o.Status).HasConversion<string>().HasMaxLength(20).IsRequired();
         builder.Property(o => o.AdminNotes).HasMaxLength(500);
 
+        builder.ToTable(t =>
+        {
+            t.HasCheckConstraint("CK_Orders_Amounts_NonNegative",
+                "\"Subtotal\" >= 0 AND \"ShippingCost\" >= 0 AND \"Total\" >= 0");
+            t.HasCheckConstraint("CK_Orders_Total_EqualsComponents",
+                "\"Total\" = \"Subtotal\" + \"ShippingCost\"");
+        });
+
         builder.HasQueryFilter(o => !o.IsDeleted);
         builder.HasIndex(o => o.OrderId).IsUnique();
         builder.HasIndex(o => o.Email);
         builder.HasIndex(o => o.Status);
         builder.HasIndex(o => o.CreatedAt);
+        builder.HasIndex(o => o.PaystackReference)
+            .IsUnique()
+            .HasFilter("\"PaystackReference\" IS NOT NULL");
     }
 }

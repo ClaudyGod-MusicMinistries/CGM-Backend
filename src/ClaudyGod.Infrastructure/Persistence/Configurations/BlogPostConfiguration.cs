@@ -60,7 +60,7 @@ public class BlogPostTagConfiguration : IEntityTypeConfiguration<BlogPostTag>
             .HasForeignKey(pt => pt.BlogPostId);
 
         builder.HasOne(pt => pt.BlogTag)
-            .WithMany()
+            .WithMany(t => t.PostTags)
             .HasForeignKey(pt => pt.BlogTagId);
     }
 }

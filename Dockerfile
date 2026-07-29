@@ -29,8 +29,8 @@ RUN groupadd --system appgroup && useradd --system --gid appgroup appuser
 # Copy published output
 COPY --from=build /app/publish .
 
-# Create uploads directory and set permissions
-RUN mkdir -p /app/uploads /app/logs && \
+# Uploads now go to S3 (WebsiteS3StorageService), not local disk — only logs need a directory here.
+RUN mkdir -p /app/logs && \
     chown -R appuser:appgroup /app
 
 USER appuser

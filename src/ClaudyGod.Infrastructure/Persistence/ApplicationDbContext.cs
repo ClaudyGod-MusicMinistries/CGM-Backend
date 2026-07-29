@@ -1,18 +1,22 @@
 using ClaudyGod.Application.Common.Interfaces;
 using ClaudyGod.Domain.Entities;
-using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace ClaudyGod.Infrastructure.Persistence;
 
 public class ApplicationDbContext : DbContext, IApplicationDbContext
 {
-    private readonly IMediator? _mediator;
+    private readonly ICurrentUserService? _currentUser;
+    private readonly IDateTimeService? _clock;
 
-    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options, IMediator? mediator = null)
+    public ApplicationDbContext(
+        DbContextOptions<ApplicationDbContext> options,
+        ICurrentUserService? currentUser = null,
+        IDateTimeService? clock = null)
         : base(options)
     {
-        _mediator = mediator;
+        _currentUser = currentUser;
+        _clock = clock;
     }
 
     public DbSet<Subscriber> Subscribers => Set<Subscriber>();
@@ -35,9 +39,14 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<Reel> Reels => Set<Reel>();
     public DbSet<Album> Albums => Set<Album>();
+    public DbSet<Product> Products => Set<Product>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<PaystackPayment> PaystackPayments => Set<PaystackPayment>();
     public DbSet<FAQ> FAQs => Set<FAQ>();
+    public DbSet<Comment> Comments => Set<Comment>();
+    public DbSet<Reaction> Reactions => Set<Reaction>();
+    public DbSet<UploadSession> UploadSessions => Set<UploadSession>();
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -56,43 +65,51 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
         modelBuilder.Entity<TicketReservation>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<User>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Reel>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Product>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Order>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<PaystackPayment>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<FAQ>().HasQueryFilter(e => !e.IsDeleted && e.IsPublished);
+        modelBuilder.Entity<Album>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Comment>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<UploadSession>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<BlogPostTag>().HasQueryFilter(e => !e.BlogPost.IsDeleted);
+        modelBuilder.Entity<RefreshToken>().HasQueryFilter(e => !e.User.IsDeleted);
     }
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
+        var now = _clock?.UtcNow ?? DateTime.UtcNow;
+        var actor = _currentUser?.UserId ?? "system";
         foreach (var entry in ChangeTracker.Entries<Domain.Entities.AuditableEntity>())
         {
             switch (entry.State)
             {
                 case EntityState.Added:
-                    entry.Entity.CreatedAt = DateTime.UtcNow;
+                    entry.Entity.CreatedAt = now;
+                    entry.Entity.CreatedBy = actor;
                     break;
                 case EntityState.Modified:
-                    entry.Entity.UpdatedAt = DateTime.UtcNow;
+                    entry.Entity.UpdatedAt = now;
+                    entry.Entity.UpdatedBy = actor;
                     break;
             }
         }
 
-        var result = await base.SaveChangesAsync(cancellationToken);
-
-        // Dispatch domain events after the transaction commits so handlers see
-        // the persisted state. Fire-and-forget failures are logged, not thrown.
-        if (_mediator is not null)
+        var eventSources = ChangeTracker.Entries<Domain.Entities.BaseEntity>().ToList();
+        foreach (var domainEvent in eventSources.SelectMany(x => x.Entity.DomainEvents))
         {
-            var events = ChangeTracker.Entries<Domain.Entities.BaseEntity>()
-                .SelectMany(e => e.Entity.DomainEvents)
-                .ToList();
-
-            foreach (var entity in ChangeTracker.Entries<Domain.Entities.BaseEntity>())
-                entity.Entity.ClearDomainEvents();
-
-            foreach (var domainEvent in events)
-                await _mediator.Publish(domainEvent, cancellationToken);
+            OutboxMessages.Add(new OutboxMessage
+            {
+                Kind = "domain-event",
+                Type = domainEvent.GetType().AssemblyQualifiedName ?? domainEvent.GetType().FullName!,
+                Payload = System.Text.Json.JsonSerializer.Serialize(domainEvent, domainEvent.GetType()),
+                OccurredAt = now,
+                AvailableAt = now
+            });
         }
+        foreach (var source in eventSources)
+            source.Entity.ClearDomainEvents();
 
-        return result;
+        return await base.SaveChangesAsync(cancellationToken);
     }
 }
