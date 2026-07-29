@@ -1,24 +1,20 @@
 using ClaudyGod.Application.Common.Interfaces;
 using ClaudyGod.Domain.Entities;
-using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace ClaudyGod.Infrastructure.Persistence;
 
 public class ApplicationDbContext : DbContext, IApplicationDbContext
 {
-    private readonly IMediator? _mediator;
     private readonly ICurrentUserService? _currentUser;
     private readonly IDateTimeService? _clock;
 
     public ApplicationDbContext(
         DbContextOptions<ApplicationDbContext> options,
-        IMediator? mediator = null,
         ICurrentUserService? currentUser = null,
         IDateTimeService? clock = null)
         : base(options)
     {
-        _mediator = mediator;
         _currentUser = currentUser;
         _clock = clock;
     }
@@ -50,6 +46,7 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
     public DbSet<Comment> Comments => Set<Comment>();
     public DbSet<Reaction> Reactions => Set<Reaction>();
     public DbSet<UploadSession> UploadSessions => Set<UploadSession>();
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -98,24 +95,21 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
             }
         }
 
-        var result = await base.SaveChangesAsync(cancellationToken);
-
-        // Dispatch domain events after persistence so handlers observe committed
-        // entity state. Handlers are awaited; durable cross-service delivery
-        // should use an outbox rather than relying on in-process notifications.
-        if (_mediator is not null)
+        var eventSources = ChangeTracker.Entries<Domain.Entities.BaseEntity>().ToList();
+        foreach (var domainEvent in eventSources.SelectMany(x => x.Entity.DomainEvents))
         {
-            var events = ChangeTracker.Entries<Domain.Entities.BaseEntity>()
-                .SelectMany(e => e.Entity.DomainEvents)
-                .ToList();
-
-            foreach (var entity in ChangeTracker.Entries<Domain.Entities.BaseEntity>())
-                entity.Entity.ClearDomainEvents();
-
-            foreach (var domainEvent in events)
-                await _mediator.Publish(domainEvent, cancellationToken);
+            OutboxMessages.Add(new OutboxMessage
+            {
+                Kind = "domain-event",
+                Type = domainEvent.GetType().AssemblyQualifiedName ?? domainEvent.GetType().FullName!,
+                Payload = System.Text.Json.JsonSerializer.Serialize(domainEvent, domainEvent.GetType()),
+                OccurredAt = now,
+                AvailableAt = now
+            });
         }
+        foreach (var source in eventSources)
+            source.Entity.ClearDomainEvents();
 
-        return result;
+        return await base.SaveChangesAsync(cancellationToken);
     }
 }

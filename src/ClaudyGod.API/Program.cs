@@ -20,6 +20,7 @@ using Serilog;
 using Serilog.Events;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using StackExchange.Redis;
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
@@ -287,6 +288,12 @@ try
         options.Configuration = redisConn;
         options.InstanceName = redisInstance;
     });
+    var redisOptions = ConfigurationOptions.Parse(redisConn);
+    redisOptions.AbortOnConnectFail = false;
+    redisOptions.ConnectRetry = 2;
+    redisOptions.ConnectTimeout = 2000;
+    redisOptions.AsyncTimeout = 2000;
+    builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisOptions));
 
     // PostgreSQL is required for readiness; Redis is an optional cache and may
     // degrade without removing an otherwise functional instance from service.
@@ -462,6 +469,7 @@ try
     app.UseHttpsRedirection();
     app.UseStaticFiles();
 
+    app.UseMiddleware<DistributedRateLimitMiddleware>();
     app.UseRateLimiter();
 
     app.UseAuthentication();

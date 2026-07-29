@@ -25,7 +25,10 @@ public static class DependencyInjection
 
         // Services
         services.AddScoped<IJwtService, JwtService>();
-        services.AddScoped<IEmailService, EmailService>();
+        services.AddScoped<IEmailService, OutboxEmailService>();
+        services.AddScoped<EmailService>();
+        services.AddHostedService<OutboxProcessor>();
+        services.AddHostedService<DataRetentionWorker>();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddSingleton<IDateTimeService, DateTimeService>();
         services.AddScoped<IEncryptionService, EncryptionService>();

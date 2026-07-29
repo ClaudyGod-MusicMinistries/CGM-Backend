@@ -32,6 +32,7 @@ public interface IApplicationDbContext
     DbSet<Comment> Comments { get; }
     DbSet<Reaction> Reactions { get; }
     DbSet<UploadSession> UploadSessions { get; }
+    DbSet<OutboxMessage> OutboxMessages { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

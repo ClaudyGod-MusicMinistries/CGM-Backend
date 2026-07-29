@@ -51,14 +51,13 @@ public class SubmitPrayerRequestCommandHandler : IRequestHandler<SubmitPrayerReq
             request.Subject, request.RequestText, request.IsConfidential);
 
         _db.PrayerRequests.Add(prayerRequest);
-        await _db.SaveChangesAsync(ct);
-
         await _email.TrySendFromTemplateAsync(request.Email, "prayer-received", new Dictionary<string, string>
         {
             ["subject"] = "Your Prayer Request Has Been Received – ClaudyGod Ministry",
             ["name"] = request.Name,
             ["prayerSubject"] = request.Subject
         }, _logger, ct);
+        await _db.SaveChangesAsync(ct);
 
         return prayerRequest.Id;
     }

@@ -82,8 +82,6 @@ public class CreateBookingCommandHandler : IRequestHandler<CreateBookingCommand,
             r.EventDate, address);
 
         _db.Bookings.Add(booking);
-        await _db.SaveChangesAsync(ct);
-
         await _email.TrySendFromTemplateAsync(r.Email, "booking-confirmation", new Dictionary<string, string>
         {
             ["subject"] = "Booking Request Received – ClaudyGod Ministry",
@@ -93,6 +91,7 @@ public class CreateBookingCommandHandler : IRequestHandler<CreateBookingCommand,
             ["organization"] = r.Organization,
             ["bookingId"] = booking.Id.ToString()
         }, _logger, ct);
+        await _db.SaveChangesAsync(ct);
 
         return booking.Id;
     }

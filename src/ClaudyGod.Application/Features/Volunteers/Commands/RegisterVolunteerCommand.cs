@@ -50,14 +50,13 @@ public class RegisterVolunteerCommandHandler : IRequestHandler<RegisterVolunteer
         var r = request.Request;
         var volunteer = Volunteer.Create(r.FirstName, r.LastName, r.Email, r.Role, r.Reason);
         _db.Volunteers.Add(volunteer);
-        await _db.SaveChangesAsync(ct);
-
         await _email.TrySendFromTemplateAsync(r.Email, "volunteer-confirmation", new Dictionary<string, string>
         {
             ["subject"] = "Thank You for Volunteering – ClaudyGod Ministry",
             ["name"] = $"{r.FirstName} {r.LastName}",
             ["role"] = r.Role.ToString()
         }, _logger, ct);
+        await _db.SaveChangesAsync(ct);
 
         return volunteer.Id;
     }

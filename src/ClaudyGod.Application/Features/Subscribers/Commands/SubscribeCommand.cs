@@ -52,15 +52,15 @@ public class SubscribeCommandHandler : IRequestHandler<SubscribeCommand, Guid>
                 throw new Domain.Exceptions.DuplicateResourceException("This email is already subscribed.");
 
             existing.Resubscribe();
-            await _db.SaveChangesAsync(ct);
             await SendWelcomeEmailAsync(existing, ct);
+            await _db.SaveChangesAsync(ct);
             return existing.Id;
         }
 
         var subscriber = Subscriber.Create(request.Name, normalizedEmail);
         _db.Subscribers.Add(subscriber);
-        await _db.SaveChangesAsync(ct);
         await SendWelcomeEmailAsync(subscriber, ct);
+        await _db.SaveChangesAsync(ct);
 
         return subscriber.Id;
     }
