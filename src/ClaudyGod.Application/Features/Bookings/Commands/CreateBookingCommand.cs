@@ -26,6 +26,9 @@ public class CreateBookingCommandValidator : AbstractValidator<CreateBookingComm
         RuleFor(x => x.Request.Phone)
             .NotEmpty().WithMessage("Phone number is required.")
             .MaximumLength(30);
+        RuleFor(x => x.Request.CountryCode)
+            .NotEmpty().WithMessage("Country code is required.")
+            .Matches("^[A-Za-z]{2}$").WithMessage("Country code must be a two-letter ISO code.");
         RuleFor(x => x.Request.Organization)
             .NotEmpty().WithMessage("Organization name is required.")
             .MaximumLength(200);
@@ -78,7 +81,7 @@ public class CreateBookingCommandHandler : IRequestHandler<CreateBookingCommand,
         var address = new Address(r.AddressLine1, r.AddressLine2, r.City, r.State, r.ZipCode ?? "", r.Country);
 
         var booking = Booking.Create(r.FirstName, r.LastName, r.Email, r.Phone,
-            r.CountryCode, r.Organization, r.OrgType, r.EventType, r.EventDetails,
+            r.CountryCode.ToUpperInvariant(), r.Organization, r.OrgType, r.EventType, r.EventDetails,
             r.EventDate, address);
 
         _db.Bookings.Add(booking);

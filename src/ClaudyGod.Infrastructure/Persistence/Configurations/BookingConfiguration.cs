@@ -17,7 +17,7 @@ public class BookingConfiguration : IEntityTypeConfiguration<Booking>
         builder.Property(b => b.OrgType).HasMaxLength(100);
         builder.Property(b => b.EventType).HasMaxLength(100);
         builder.Property(b => b.EventDetails).HasMaxLength(2000);
-        builder.Property(b => b.CountryCode).HasConversion<string>().HasMaxLength(10);
+        builder.Property(b => b.CountryCode).HasMaxLength(2).IsRequired();
         builder.Property(b => b.Status).HasConversion<string>().HasMaxLength(20);
 
         builder.OwnsOne(b => b.Address, a =>

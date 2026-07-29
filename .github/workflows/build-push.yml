@@ -2,9 +2,9 @@ name: Build & Push API → GHCR
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
   workflow_dispatch:
 
 env:
@@ -85,6 +85,7 @@ jobs:
   build:
     name: Build & push image
     needs: test
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     permissions:

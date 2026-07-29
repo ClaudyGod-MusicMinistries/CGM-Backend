@@ -1,5 +1,3 @@
-using ClaudyGod.Domain.Enums;
-
 namespace ClaudyGod.Application.Features.Bookings.DTOs;
 
 public record CreateBookingRequest(
@@ -7,7 +5,7 @@ public record CreateBookingRequest(
     string LastName,
     string Email,
     string Phone,
-    CountryCode CountryCode,
+    string CountryCode,
     string Organization,
     string OrgType,
     string EventType,
@@ -17,7 +15,7 @@ public record CreateBookingRequest(
     string? AddressLine2,
     string City,
     string State,
-    string ZipCode,
+    string? ZipCode,
     string Country,
     bool AgreeTerms);
 
