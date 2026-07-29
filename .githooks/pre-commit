@@ -9,11 +9,9 @@
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
-info()    { echo -e "${GREEN}→${NC} $*"; }
-warn()    { echo -e "${YELLOW}⚠${NC}  $*"; }
-success() { echo -e "${GREEN}✓${NC} $*"; }
-die()     { echo -e "${RED}✗${NC} $*" >&2; exit 1; }
+HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$HOOK_DIR/lib/ui.sh"
+hook_header "PRE-COMMIT  Fast staged-code review"
 
 # Git hooks run with a leaner PATH than your interactive shell — dotnet may be
 # on your PATH via ~/.zshrc or `brew shellenv`, neither of which non-login
@@ -68,7 +66,7 @@ while IFS= read -r line; do
 done < <(git diff --cached --name-only --diff-filter=ACMR -- '*.cs')
 
 if [[ ${#STAGED_CS_FILES[@]} -eq 0 ]]; then
-  info "No staged .cs files — skipping format check."
+  hook_success "No staged C# files required formatting."
   exit 0
 fi
 
@@ -76,11 +74,7 @@ if ! find_dotnet; then
   die "dotnet SDK not found — checked common install locations, and even asked \$SHELL (${SHELL:-unset}) for its real PATH, with no luck. Run 'which dotnet' in your terminal and paste it back so the exact path can be hardcoded into find_dotnet(). To skip this check just once: git commit --no-verify."
 fi
 
-info "Checking formatting on ${#STAGED_CS_FILES[@]} staged file(s)..."
-
-if ! dotnet format ClaudyGod.sln --verify-no-changes --include "${STAGED_CS_FILES[@]}"; then
-  echo ""
-  die "Formatting issues found. Run 'dotnet format ClaudyGod.sln --include ${STAGED_CS_FILES[*]}', review the diff, re-stage, and commit again."
-fi
-
-success "Formatting OK."
+HOOK_FAILURE_HINT="Run dotnet format, review the result, and re-stage the files."
+run_step "C# formatting (${#STAGED_CS_FILES[@]} staged files)" \
+  dotnet format ClaudyGod.sln --verify-no-changes --include "${STAGED_CS_FILES[@]}"
+hook_success "Commit approved."

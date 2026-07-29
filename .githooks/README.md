@@ -1,6 +1,8 @@
 # Git hooks
 
-Native git hooks — no Husky, no npm/NuGet package. Tracked in version control here instead of the untracked `.git/hooks/`, and wired up via git's built-in `core.hooksPath` setting.
+Native Git hooks with a polished terminal quality-gate UI. There is no Husky, Lefthook, npm hook dependency, or NuGet hook dependency. Hooks are tracked here and activated through Git's built-in `core.hooksPath`.
+
+Each named check shows its result and elapsed time. Failures stop the Git operation, retain the command's real output, and provide an actionable recovery message. Set `NO_COLOR=1` for plain CI/accessibility output.
 
 ## One-time setup (per clone)
 
