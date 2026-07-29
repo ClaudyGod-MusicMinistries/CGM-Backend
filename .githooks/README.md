@@ -5,15 +5,15 @@ Native git hooks — no Husky, no npm/NuGet package. Tracked in version control 
 ## One-time setup (per clone)
 
 ```bash
-git config core.hooksPath .githooks
+./scripts/install-git-hooks.sh
 ```
 
 That's it — every commit and push from then on runs the hooks below automatically.
 
 ## What runs
 
-- **pre-commit** — `dotnet format --verify-no-changes` on staged `.cs` files only. Fast; fails and tells you what to fix rather than silently rewriting your changes.
-- **pre-push** — full `dotnet build` (Release) + full `dotnet test` across every project, mirroring the exact steps `.github/workflows/build-push.yml` runs in CI. If this fails locally, it would have failed CI too.
+- **pre-commit** — staged whitespace/conflict-marker and credential checks, followed by C# formatting verification. It never rewrites staged work.
+- **pre-push** — restore, formatting, vulnerability audit, Release build, EF migration-drift check, unit/API tests, and disposable PostgreSQL integration tests. Docker must be running.
 
 ## Bypassing (use sparingly)
 

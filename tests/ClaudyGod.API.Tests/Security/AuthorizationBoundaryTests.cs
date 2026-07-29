@@ -51,6 +51,45 @@ public class AuthorizationBoundaryTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task ValidGatewayKey_AuthenticatesAdminActor()
+    {
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("x-api-key", ApiFactory.AdminGatewayApiKey);
+        client.DefaultRequestHeaders.Add("x-actor-id", Guid.NewGuid().ToString());
+        client.DefaultRequestHeaders.Add("x-actor-email", "admin@example.com");
+
+        var response = await client.GetAsync("/api/v1.0/auth/me");
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task WrongGatewayKey_IsRejected()
+    {
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("x-api-key", "wrong-admin-gateway-key-that-is-long-enough");
+        client.DefaultRequestHeaders.Add("x-actor-id", Guid.NewGuid().ToString());
+        client.DefaultRequestHeaders.Add("x-actor-email", "attacker@example.com");
+
+        var response = await client.GetAsync("/api/v1.0/admin/dashboard");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task GatewayKey_WithoutValidActorIdentity_IsRejected()
+    {
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("x-api-key", ApiFactory.AdminGatewayApiKey);
+        client.DefaultRequestHeaders.Add("x-actor-id", "not-a-guid");
+        client.DefaultRequestHeaders.Add("x-actor-email", "admin@example.com");
+
+        var response = await client.GetAsync("/api/v1.0/admin/dashboard");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
     public async Task AuthenticatedNonAdmin_IsForbiddenFromAdminEndpoint()
     {
         using var client = _factory.CreateClient();

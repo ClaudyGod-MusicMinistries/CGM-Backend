@@ -32,3 +32,15 @@ Create central alerts for:
 ```bash
 dotnet test tests/ClaudyGod.PostgresIntegration.Tests
 ```
+# Admin gateway authentication
+
+The Web Studio reaches this API only through the ClaudyGod admin gateway. Configure the same
+high-entropy secret in both deployments:
+
+- `AdminGateway__ApiKey` on `CGM-Backend`.
+- `CGM_API_KEY` on the admin/mobile Express API.
+
+Use at least 32 random bytes and rotate both values together. The backend rejects production
+startup when the gateway key is missing, is a placeholder, or is shorter than 32 bytes. Actor
+headers are trusted only after this service key authenticates successfully; sending
+`x-actor-id` or `x-actor-email` without the key never authenticates a request.

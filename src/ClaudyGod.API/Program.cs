@@ -7,7 +7,9 @@ using ClaudyGod.Infrastructure.Persistence;
 using ClaudyGod.API.Middleware;
 using ClaudyGod.API.Filters;
 using ClaudyGod.API.Common;
+using ClaudyGod.API.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -76,6 +78,10 @@ try
             throw new InvalidOperationException("A production JWT signing key must be configured.");
         if (IsPlaceholder(builder.Configuration["Jwt:Issuer"]) || IsPlaceholder(builder.Configuration["Jwt:Audience"]))
             throw new InvalidOperationException("Jwt:Issuer and Jwt:Audience must be configured in production.");
+        var adminGatewayApiKey = builder.Configuration["AdminGateway:ApiKey"];
+        if (IsPlaceholder(adminGatewayApiKey) || Encoding.UTF8.GetByteCount(adminGatewayApiKey!) < 32)
+            throw new InvalidOperationException(
+                "AdminGateway:ApiKey must be configured with at least 32 bytes in production.");
     }
 
     // Serilog
@@ -221,7 +227,22 @@ try
     if (System.Text.Encoding.UTF8.GetByteCount(jwtKey) < 32)
         throw new InvalidOperationException("Jwt:Key must be at least 32 bytes for HmacSha256.");
 
-    builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    const string adminOrBearerScheme = "AdminGatewayOrBearer";
+    builder.Services.AddAuthentication(options =>
+        {
+            options.DefaultScheme = adminOrBearerScheme;
+            options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+        })
+        .AddPolicyScheme(adminOrBearerScheme, adminOrBearerScheme, options =>
+        {
+            options.ForwardDefaultSelector = context =>
+                context.Request.Headers.ContainsKey(AdminGatewayAuthenticationHandler.ApiKeyHeader)
+                    ? AdminGatewayAuthenticationHandler.SchemeName
+                    : JwtBearerDefaults.AuthenticationScheme;
+        })
+        .AddScheme<AuthenticationSchemeOptions, AdminGatewayAuthenticationHandler>(
+            AdminGatewayAuthenticationHandler.SchemeName,
+            _ => { })
         .AddJwtBearer(options =>
         {
             options.TokenValidationParameters = new TokenValidationParameters

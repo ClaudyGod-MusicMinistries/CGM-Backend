@@ -66,7 +66,28 @@ dotnet format ClaudyGod.sln --no-restore --verify-no-changes || die "Formatting 
 info "Auditing dependencies..."
 dotnet list ClaudyGod.sln package --vulnerable --include-transitive || die "Dependency audit failed."
 
-info "Running full test suite..."
-dotnet test ClaudyGod.sln --no-build -c Release --logger "console;verbosity=normal" || die "Tests failed. Fix the failing tests above before pushing."
+info "Checking EF Core migration drift..."
+dotnet ef migrations has-pending-model-changes \
+  --project src/ClaudyGod.Infrastructure \
+  --startup-project src/ClaudyGod.API \
+  --no-build || die "The EF model changed without a migration. Add and review a migration before pushing."
 
-success "Build and tests passed — pushing."
+info "Running unit and API test suites..."
+for project in \
+  tests/ClaudyGod.Domain.Tests \
+  tests/ClaudyGod.Application.Tests \
+  tests/ClaudyGod.Infrastructure.Tests \
+  tests/ClaudyGod.API.Tests; do
+  dotnet test "$project" --no-build -c Release --logger "console;verbosity=normal" || \
+    die "Tests failed in $project. Fix them before pushing."
+done
+
+if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+  die "Docker is required for PostgreSQL integration tests. Start Docker and push again."
+fi
+
+info "Running PostgreSQL 16 integration tests..."
+dotnet test tests/ClaudyGod.PostgresIntegration.Tests --no-build -c Release \
+  --logger "console;verbosity=normal" || die "Production-equivalent PostgreSQL tests failed."
+
+success "Formatting, security, migrations, build, and all tests passed — pushing."
