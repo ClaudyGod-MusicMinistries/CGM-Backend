@@ -125,14 +125,15 @@ try
             var problem = new ProblemDetails
             {
                 Type = "https://httpstatuses.io/400",
-                Title = "Validation Failed",
+                Title = "Please check the information you entered",
                 Status = StatusCodes.Status400BadRequest,
-                Detail = "One or more validation errors occurred. See 'errors' for details.",
+                Detail = "Some information was missing or invalid. Correct the highlighted fields and try again.",
                 Instance = context.HttpContext.Request.Path,
             };
             if (context.HttpContext.Items.TryGetValue(CorrelationIdMiddleware.HeaderName, out var cid))
                 problem.Extensions["correlationId"] = cid;
             problem.Extensions["errors"] = fieldErrors;
+            problem.Extensions["code"] = "INVALID_REQUEST";
 
             return new BadRequestObjectResult(problem)
             {
@@ -362,20 +363,35 @@ try
             });
         });
 
+        options.AddPolicy("subscription", ctx =>
+        {
+            var ip = ClientKey(ctx);
+            return RateLimitPartition.GetFixedWindowLimiter($"subscription:{ip}", _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromHours(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+        });
+
         options.OnRejected = async (ctx, token) =>
         {
             ctx.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
             ctx.HttpContext.Response.ContentType = "application/problem+json";
             var retryAfter = ctx.Lease.TryGetMetadata(MetadataName.RetryAfter, out var r) ? (int)r.TotalSeconds : 60;
             ctx.HttpContext.Response.Headers["Retry-After"] = retryAfter.ToString();
-            var json = JsonSerializer.Serialize(new ProblemDetails
+            var problem = new ProblemDetails
             {
                 Type = "https://httpstatuses.io/429",
                 Title = "Too Many Requests",
                 Status = StatusCodes.Status429TooManyRequests,
-                Detail = $"Rate limit exceeded. Retry after {retryAfter} seconds.",
+                Detail = "You have made too many requests. Please wait a little while and try again.",
                 Instance = ctx.HttpContext.Request.Path,
-            });
+            };
+            problem.Extensions["code"] = "TOO_MANY_REQUESTS";
+            problem.Extensions["retryAfterSeconds"] = retryAfter;
+            var json = JsonSerializer.Serialize(problem);
             await ctx.HttpContext.Response.WriteAsync(json, token);
         };
     });

@@ -26,20 +26,24 @@ public class MediaController : ControllerBase
         [FromQuery] bool? isPublished = null,
         CancellationToken ct = default)
     {
-        MediaType? parsedType = null;
-        if (!string.IsNullOrEmpty(type))
-        {
-            if (!Enum.TryParse<MediaType>(type, ignoreCase: true, out var value))
-            {
-                var valid = string.Join(", ", Enum.GetNames<MediaType>());
-                throw new ClaudyGod.Domain.Exceptions.ValidationException(
-                    new Dictionary<string, string[]> { ["type"] = [$"Type must be one of: {valid}."] });
-            }
-            parsedType = value;
-        }
+        var parsedType = ParseMediaType(type);
 
         var result = await _mediator.Send(new GetMediaQuery(page, pageSize, parsedType, isPublished), ct);
         return Ok(ApiResponse<PaginatedResult<MediaItemDto>>.Ok(result));
+    }
+
+    private static MediaType? ParseMediaType(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+
+        var normalized = value.Trim().Replace("-", string.Empty).Replace("_", string.Empty);
+        if (normalized.Equals("video", StringComparison.OrdinalIgnoreCase)) return MediaType.SermonVideo;
+        if (normalized.Equals("audio", StringComparison.OrdinalIgnoreCase)) return MediaType.SermonAudio;
+        if (Enum.TryParse<MediaType>(normalized, true, out var mediaType) && Enum.IsDefined(mediaType))
+            return mediaType;
+
+        throw new ClaudyGod.Domain.Exceptions.ValidationException(
+            new Dictionary<string, string[]> { ["type"] = ["Choose one of: video, audio, music, photo, or other."] });
     }
 
     /// <summary>

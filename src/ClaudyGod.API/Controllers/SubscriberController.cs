@@ -6,6 +6,7 @@ using ClaudyGod.Application.Features.Subscribers.DTOs;
 using ClaudyGod.Application.Features.Subscribers.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace ClaudyGod.API.Controllers;
 
@@ -20,6 +21,7 @@ public class SubscriberController : ControllerBase
 
     [PublicEndpoint]
     [HttpPost]
+    [EnableRateLimiting("subscription")]
     public async Task<ActionResult<ApiResponse<object>>> Subscribe(
         [FromBody] SubscribeRequestDto dto, CancellationToken ct)
     {
@@ -29,6 +31,7 @@ public class SubscriberController : ControllerBase
 
     [PublicEndpoint]
     [HttpDelete("unsubscribe")]
+    [EnableRateLimiting("subscription")]
     public async Task<ActionResult<ApiResponse>> Unsubscribe(
         [FromQuery] string email, [FromQuery] string token, CancellationToken ct)
     {
