@@ -13,7 +13,7 @@ That's it — every commit and push from then on runs the hooks below automatica
 ## What runs
 
 - **pre-commit** — staged whitespace/conflict-marker and credential checks, followed by C# formatting verification. It never rewrites staged work.
-- **pre-push** — restore, formatting, vulnerability audit, Release build, EF migration-drift check, unit/API tests, and disposable PostgreSQL integration tests. Docker must be running.
+- **pre-push** — restore, formatting, vulnerability audit, Release build, EF migration-drift check, unit/API tests, and disposable PostgreSQL integration tests when Docker is available. GitHub Actions always runs the PostgreSQL suite. Set `REQUIRE_INTEGRATION_TESTS=1` to make Docker mandatory locally as well.
 
 ## Bypassing (use sparingly)
 

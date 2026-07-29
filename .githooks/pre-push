@@ -11,8 +11,9 @@
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
 
-GREEN='\033[0;32m'; RED='\033[0;31m'; NC='\033[0m'
+GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
 info()    { echo -e "${GREEN}→${NC} $*"; }
+warn()    { echo -e "${YELLOW}⚠${NC}  $*"; }
 success() { echo -e "${GREEN}✓${NC} $*"; }
 die()     { echo -e "${RED}✗${NC} $*" >&2; exit 1; }
 
@@ -82,12 +83,15 @@ for project in \
     die "Tests failed in $project. Fix them before pushing."
 done
 
-if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
-  die "Docker is required for PostgreSQL integration tests. Start Docker and push again."
+if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+  info "Running PostgreSQL 16 integration tests..."
+  dotnet test tests/ClaudyGod.PostgresIntegration.Tests --no-build -c Release \
+    --logger "console;verbosity=normal" || die "Production-equivalent PostgreSQL tests failed."
+elif [[ "${REQUIRE_INTEGRATION_TESTS:-0}" == "1" ]]; then
+  die "Docker is unavailable and REQUIRE_INTEGRATION_TESTS=1. Start Docker and push again."
+else
+  warn "Docker is unavailable; PostgreSQL integration tests were skipped locally."
+  warn "They remain mandatory in GitHub Actions, and deployment cannot proceed if they fail."
 fi
 
-info "Running PostgreSQL 16 integration tests..."
-dotnet test tests/ClaudyGod.PostgresIntegration.Tests --no-build -c Release \
-  --logger "console;verbosity=normal" || die "Production-equivalent PostgreSQL tests failed."
-
-success "Formatting, security, migrations, build, and all tests passed — pushing."
+success "Formatting, security, migrations, build, and all available local tests passed — pushing."

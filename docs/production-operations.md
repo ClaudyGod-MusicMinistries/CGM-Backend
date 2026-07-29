@@ -27,11 +27,13 @@ Create central alerts for:
 
 ## Integration tests
 
-`ClaudyGod.PostgresIntegration.Tests` starts disposable `postgres:16-alpine`, applies the real migrations, and verifies PostgreSQL-only behavior. Docker must be available locally and in CI. Run with:
+`ClaudyGod.PostgresIntegration.Tests` starts disposable `postgres:16-alpine`, applies the real migrations, and verifies PostgreSQL-only behavior. Docker is required to execute this suite; GitHub Actions provides it automatically. Run locally with:
 
 ```bash
 dotnet test tests/ClaudyGod.PostgresIntegration.Tests
 ```
+
+The local pre-push hook runs this suite whenever Docker is available and otherwise warns while allowing GitHub Actions to enforce it. For release-critical local work, use `REQUIRE_INTEGRATION_TESTS=1 git push` to fail closed when Docker is unavailable.
 # Admin gateway authentication
 
 The Web Studio reaches this API only through the ClaudyGod admin gateway. Configure the same
