@@ -6,6 +6,7 @@ using ClaudyGod.Infrastructure;
 using ClaudyGod.Infrastructure.Persistence;
 using ClaudyGod.API.Middleware;
 using ClaudyGod.API.Filters;
+using ClaudyGod.API.Common;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -122,18 +123,13 @@ try
                     kvp => kvp.Key,
                     kvp => kvp.Value!.Errors.Select(e => e.ErrorMessage).ToArray());
 
-            var problem = new ProblemDetails
-            {
-                Type = "https://httpstatuses.io/400",
-                Title = "Please check the information you entered",
-                Status = StatusCodes.Status400BadRequest,
-                Detail = "Some information was missing or invalid. Correct the highlighted fields and try again.",
-                Instance = context.HttpContext.Request.Path,
-            };
-            if (context.HttpContext.Items.TryGetValue(CorrelationIdMiddleware.HeaderName, out var cid))
-                problem.Extensions["correlationId"] = cid;
-            problem.Extensions["errors"] = fieldErrors;
-            problem.Extensions["code"] = "INVALID_REQUEST";
+            var problem = ApiProblemDetails.Create(
+                context.HttpContext,
+                StatusCodes.Status400BadRequest,
+                "INVALID_REQUEST",
+                "Please check the information you entered",
+                "Some information was missing or invalid. Correct the highlighted fields and try again.",
+                fieldErrors);
 
             return new BadRequestObjectResult(problem)
             {
@@ -224,27 +220,23 @@ try
                     context.HandleResponse();
                     context.Response.StatusCode = StatusCodes.Status401Unauthorized;
                     context.Response.ContentType = "application/problem+json";
-                    await context.Response.WriteAsJsonAsync(new ProblemDetails
-                    {
-                        Type = "https://httpstatuses.io/401",
-                        Title = "Unauthorized",
-                        Status = StatusCodes.Status401Unauthorized,
-                        Detail = "A valid bearer token is required.",
-                        Instance = context.Request.Path,
-                    });
+                    await context.Response.WriteAsJsonAsync(ApiProblemDetails.Create(
+                        context.HttpContext,
+                        StatusCodes.Status401Unauthorized,
+                        "AUTHENTICATION_REQUIRED",
+                        "Authentication required",
+                        "Sign in with a valid account to access this resource."));
                 },
                 OnForbidden = async context =>
                 {
                     context.Response.StatusCode = StatusCodes.Status403Forbidden;
                     context.Response.ContentType = "application/problem+json";
-                    await context.Response.WriteAsJsonAsync(new ProblemDetails
-                    {
-                        Type = "https://httpstatuses.io/403",
-                        Title = "Forbidden",
-                        Status = StatusCodes.Status403Forbidden,
-                        Detail = "The authenticated identity does not have permission to access this resource.",
-                        Instance = context.Request.Path,
-                    });
+                    await context.Response.WriteAsJsonAsync(ApiProblemDetails.Create(
+                        context.HttpContext,
+                        StatusCodes.Status403Forbidden,
+                        "ACCESS_DENIED",
+                        "Access denied",
+                        "Your account does not have permission to perform this action."));
                 },
             };
         });
@@ -375,21 +367,42 @@ try
             });
         });
 
+        options.AddPolicy("public-form", ctx =>
+        {
+            var ip = ClientKey(ctx);
+            return RateLimitPartition.GetFixedWindowLimiter($"public-form:{ip}", _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(10),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+        });
+
+        options.AddPolicy("commerce", ctx =>
+        {
+            var ip = ClientKey(ctx);
+            return RateLimitPartition.GetFixedWindowLimiter($"commerce:{ip}", _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(5),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+        });
+
         options.OnRejected = async (ctx, token) =>
         {
             ctx.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
             ctx.HttpContext.Response.ContentType = "application/problem+json";
             var retryAfter = ctx.Lease.TryGetMetadata(MetadataName.RetryAfter, out var r) ? (int)r.TotalSeconds : 60;
             ctx.HttpContext.Response.Headers["Retry-After"] = retryAfter.ToString();
-            var problem = new ProblemDetails
-            {
-                Type = "https://httpstatuses.io/429",
-                Title = "Too Many Requests",
-                Status = StatusCodes.Status429TooManyRequests,
-                Detail = "You have made too many requests. Please wait a little while and try again.",
-                Instance = ctx.HttpContext.Request.Path,
-            };
-            problem.Extensions["code"] = "TOO_MANY_REQUESTS";
+            var problem = ApiProblemDetails.Create(
+                ctx.HttpContext,
+                StatusCodes.Status429TooManyRequests,
+                "TOO_MANY_REQUESTS",
+                "Too many requests",
+                "You have made too many requests. Please wait a little while and try again.");
             problem.Extensions["retryAfterSeconds"] = retryAfter;
             var json = JsonSerializer.Serialize(problem);
             await ctx.HttpContext.Response.WriteAsync(json, token);
@@ -426,20 +439,14 @@ try
         app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "ClaudyGod API v1"));
     }
 
-    // Routing must be established before CORS/ApiKeyMiddleware so that:
-    //  (a) UseCors can short-circuit preflight OPTIONS requests with proper headers, and
-    //  (b) ApiKeyMiddleware can read endpoint metadata (e.g. [PublicEndpoint]).
+    // Resolve endpoints before CORS and authorization evaluate their metadata.
     app.UseRouting();
 
-    // CORS must run before ApiKeyMiddleware. Previously it ran after, so a CORS preflight
-    // (OPTIONS) request — which never carries the custom x-api-key header — was rejected
-    // with a bare 401 by ApiKeyMiddleware before Access-Control-Allow-Origin was ever
-    // attached, which the browser reports as a CORS failure instead of the real 401.
+    // CORS runs before authentication so preflight requests are handled cleanly.
     app.UseCors("AllowFrontend");
 
     app.UseMiddleware<ExceptionMiddleware>();
     app.UseMiddleware<SecurityHeadersMiddleware>();
-    app.UseMiddleware<ApiKeyMiddleware>();
 
     app.UseHttpsRedirection();
     app.UseStaticFiles();

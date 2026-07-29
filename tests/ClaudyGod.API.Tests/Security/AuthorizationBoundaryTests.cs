@@ -19,7 +19,7 @@ public class AuthorizationBoundaryTests : IClassFixture<ApiFactory>
     public AuthorizationBoundaryTests(ApiFactory factory) => _factory = factory;
 
     [Fact]
-    public async Task PublicEndpoint_DoesNotRequireApiKeyOrJwt()
+    public async Task PublicEndpoint_DoesNotRequireJwt()
     {
         using var client = _factory.CreateClient();
 
@@ -29,20 +29,9 @@ public class AuthorizationBoundaryTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
-    public async Task AdminEndpoint_WithoutApiKey_IsRejected()
+    public async Task AdminEndpoint_WithoutJwt_IsRejected()
     {
         using var client = _factory.CreateClient();
-
-        var response = await client.GetAsync("/api/v1.0/admin/dashboard");
-
-        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-    }
-
-    [Fact]
-    public async Task AdminEndpoint_WithApiKeyButWithoutJwt_IsRejected()
-    {
-        using var client = _factory.CreateClient();
-        client.DefaultRequestHeaders.Add("x-api-key", ApiFactory.ApiKey);
 
         var response = await client.GetAsync("/api/v1.0/admin/dashboard");
 
@@ -53,7 +42,6 @@ public class AuthorizationBoundaryTests : IClassFixture<ApiFactory>
     public async Task SpoofedActorHeaders_DoNotAuthenticateAdminRequest()
     {
         using var client = _factory.CreateClient();
-        client.DefaultRequestHeaders.Add("x-api-key", ApiFactory.ApiKey);
         client.DefaultRequestHeaders.Add("x-actor-id", Guid.NewGuid().ToString());
         client.DefaultRequestHeaders.Add("x-actor-email", "attacker@example.com");
 
@@ -66,7 +54,6 @@ public class AuthorizationBoundaryTests : IClassFixture<ApiFactory>
     public async Task AuthenticatedNonAdmin_IsForbiddenFromAdminEndpoint()
     {
         using var client = _factory.CreateClient();
-        client.DefaultRequestHeaders.Add("x-api-key", ApiFactory.ApiKey);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", CreateToken(UserRole.User));
 
         var response = await client.GetAsync("/api/v1.0/admin/dashboard");
@@ -83,6 +70,16 @@ public class AuthorizationBoundaryTests : IClassFixture<ApiFactory>
         var response = await client.GetAsync("/api/v1.0/auth/me");
 
         response.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task OwnIdentity_WithoutBearerToken_IsRejected()
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/api/v1.0/auth/me");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 
     [Fact]

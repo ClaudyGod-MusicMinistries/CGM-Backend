@@ -14,6 +14,7 @@ public record CreateOrderCommand(CreateOrderRequest Request) : IRequest<Guid>;
 public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
 {
     private static readonly string[] SupportedPaymentMethods = ["paystack", "bank_transfer"];
+    private static readonly string[] SupportedShippingMethods = ["standard", "express"];
 
     public CreateOrderCommandValidator()
     {
@@ -30,7 +31,9 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
         RuleFor(x => x.Request.Shipping.City).NotEmpty().MaximumLength(100);
         RuleFor(x => x.Request.Shipping.State).NotEmpty().MaximumLength(100);
         RuleFor(x => x.Request.Shipping.Country).NotEmpty().MaximumLength(100);
-        RuleFor(x => x.Request.ShippingMethod).NotEmpty().MaximumLength(50);
+        RuleFor(x => x.Request.ShippingMethod)
+            .Must(value => SupportedShippingMethods.Contains(value, StringComparer.OrdinalIgnoreCase))
+            .WithMessage("Supported shipping methods are standard and express.");
         RuleFor(x => x.Request.PaymentMethod)
             .Must(value => SupportedPaymentMethods.Contains(value, StringComparer.OrdinalIgnoreCase))
             .WithMessage("Supported payment methods are paystack and bank_transfer.");
@@ -46,6 +49,15 @@ public class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
 
 public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Guid>
 {
+    // Backend-owned prices. Client totals are verified against these values and
+    // never determine what an order costs.
+    private static readonly IReadOnlyDictionary<string, decimal> ShippingRates =
+        new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["standard"] = 9.99m,
+            ["express"] = 19.99m,
+        };
+
     private readonly IApplicationDbContext _context;
     private readonly IPaystackService _paystack;
 
@@ -85,8 +97,10 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Gui
         }).ToList();
 
         var canonicalSubtotal = canonicalItems.Sum(item => item.Price * item.Quantity);
-        var expectedTotal = canonicalSubtotal + req.ShippingCost;
-        if (req.Subtotal != canonicalSubtotal || req.Total != expectedTotal)
+        var canonicalShippingCost = ShippingRates[req.ShippingMethod];
+        var expectedTotal = canonicalSubtotal + canonicalShippingCost;
+        if (req.Subtotal != canonicalSubtotal || req.ShippingCost != canonicalShippingCost ||
+            req.Total != expectedTotal)
             throw new DomainException("Order totals do not match the current product catalog.");
 
         if (req.PaymentMethod.Equals("paystack", StringComparison.OrdinalIgnoreCase))
@@ -118,7 +132,7 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Gui
             shippingMethod: req.ShippingMethod,
             paymentMethod: req.PaymentMethod,
             subtotal: canonicalSubtotal,
-            shippingCost: req.ShippingCost,
+            shippingCost: canonicalShippingCost,
             total: expectedTotal,
             currency: req.Currency.ToUpperInvariant(),
             paystackRef: req.PaystackRef);
@@ -131,6 +145,10 @@ public class CreateOrderCommandHandler : IRequestHandler<CreateOrderCommand, Gui
         catch (DbUpdateConcurrencyException)
         {
             throw new DomainException("Product availability changed while placing the order. Please review your cart and try again.");
+        }
+        catch (DbUpdateException) when (!string.IsNullOrWhiteSpace(req.PaystackRef))
+        {
+            throw new DuplicateResourceException("This Paystack payment has already been used for an order.");
         }
 
         return order.Id;

@@ -14,6 +14,7 @@ namespace ClaudyGod.API.Controllers;
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/media/youtube")]
 [PublicEndpoint]
+[Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("public-form")]
 public class YoutubeController : ControllerBase
 {
     private readonly IMediator _mediator;

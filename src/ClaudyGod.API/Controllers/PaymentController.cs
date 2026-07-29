@@ -29,6 +29,7 @@ public class PaymentController : ControllerBase
     }
 
     [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("commerce")]
     [HttpPost("zelle/validate")]
     public async Task<ActionResult<ApiResponse<object>>> ValidateZelle(
         [FromBody] ValidateZelleRequest dto, CancellationToken ct)
@@ -41,6 +42,7 @@ public class PaymentController : ControllerBase
     }
 
     [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("commerce")]
     [HttpPost("ngn-transfer/validate")]
     [RequestSizeLimit(10 * 1024 * 1024)]
     public async Task<ActionResult<ApiResponse<object>>> ValidateNigerianTransfer(
@@ -53,6 +55,7 @@ public class PaymentController : ControllerBase
     }
 
     [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("commerce")]
     [HttpPost("paystack/record")]
     public async Task<ActionResult<ApiResponse<object>>> RecordPaystackPayment(
         [FromBody] RecordPaystackPaymentRequest dto, CancellationToken ct)

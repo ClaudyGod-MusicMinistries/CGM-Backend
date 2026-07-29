@@ -19,6 +19,7 @@ public class VolunteerController : ControllerBase
     public VolunteerController(IMediator mediator) => _mediator = mediator;
 
     [PublicEndpoint]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("public-form")]
     [HttpPost]
     public async Task<ActionResult<ApiResponse<object>>> Register(
         [FromBody] RegisterVolunteerRequest dto, CancellationToken ct)

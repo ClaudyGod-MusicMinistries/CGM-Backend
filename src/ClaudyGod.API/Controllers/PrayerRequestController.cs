@@ -19,6 +19,7 @@ public class PrayerRequestController : ControllerBase
     public PrayerRequestController(IMediator mediator) => _mediator = mediator;
 
     [PublicEndpoint]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("public-form")]
     [HttpPost]
     public async Task<ActionResult<ApiResponse<object>>> Submit(
         [FromBody] SubmitPrayerRequestDto dto, CancellationToken ct)

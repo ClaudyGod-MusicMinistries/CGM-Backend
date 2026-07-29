@@ -8,11 +8,19 @@ namespace ClaudyGod.Infrastructure.Persistence;
 public class ApplicationDbContext : DbContext, IApplicationDbContext
 {
     private readonly IMediator? _mediator;
+    private readonly ICurrentUserService? _currentUser;
+    private readonly IDateTimeService? _clock;
 
-    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options, IMediator? mediator = null)
+    public ApplicationDbContext(
+        DbContextOptions<ApplicationDbContext> options,
+        IMediator? mediator = null,
+        ICurrentUserService? currentUser = null,
+        IDateTimeService? clock = null)
         : base(options)
     {
         _mediator = mediator;
+        _currentUser = currentUser;
+        _clock = clock;
     }
 
     public DbSet<Subscriber> Subscribers => Set<Subscriber>();
@@ -73,23 +81,28 @@ public class ApplicationDbContext : DbContext, IApplicationDbContext
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
+        var now = _clock?.UtcNow ?? DateTime.UtcNow;
+        var actor = _currentUser?.UserId ?? "system";
         foreach (var entry in ChangeTracker.Entries<Domain.Entities.AuditableEntity>())
         {
             switch (entry.State)
             {
                 case EntityState.Added:
-                    entry.Entity.CreatedAt = DateTime.UtcNow;
+                    entry.Entity.CreatedAt = now;
+                    entry.Entity.CreatedBy = actor;
                     break;
                 case EntityState.Modified:
-                    entry.Entity.UpdatedAt = DateTime.UtcNow;
+                    entry.Entity.UpdatedAt = now;
+                    entry.Entity.UpdatedBy = actor;
                     break;
             }
         }
 
         var result = await base.SaveChangesAsync(cancellationToken);
 
-        // Dispatch domain events after the transaction commits so handlers see
-        // the persisted state. Fire-and-forget failures are logged, not thrown.
+        // Dispatch domain events after persistence so handlers observe committed
+        // entity state. Handlers are awaited; durable cross-service delivery
+        // should use an outbox rather than relying on in-process notifications.
         if (_mediator is not null)
         {
             var events = ChangeTracker.Entries<Domain.Entities.BaseEntity>()

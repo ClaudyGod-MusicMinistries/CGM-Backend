@@ -20,6 +20,7 @@ public class BookingController : ControllerBase
     public BookingController(IMediator mediator) => _mediator = mediator;
 
     [PublicEndpoint]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("public-form")]
     [HttpPost]
     public async Task<ActionResult<ApiResponse<object>>> Create(
         [FromBody] CreateBookingRequest dto, CancellationToken ct)

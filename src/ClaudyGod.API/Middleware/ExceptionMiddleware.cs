@@ -1,5 +1,6 @@
-using System.Net;
 using System.Text.Json;
+using System.Runtime.ExceptionServices;
+using ClaudyGod.API.Common;
 using ClaudyGod.Domain.Exceptions;
 using Microsoft.AspNetCore.Mvc;
 using ValidationException = ClaudyGod.Domain.Exceptions.ValidationException;
@@ -36,12 +37,27 @@ public class ExceptionMiddleware
         }
         catch (Exception ex)
         {
+            if (ex is OperationCanceledException && context.RequestAborted.IsCancellationRequested)
+            {
+                _logger.LogDebug("Request cancelled by client on {Method} {Path}",
+                    context.Request.Method, context.Request.Path);
+                return;
+            }
+
             await HandleAsync(context, ex);
         }
     }
 
     private async Task HandleAsync(HttpContext context, Exception ex)
     {
+        if (context.Response.HasStarted)
+        {
+            _logger.LogError(ex, "Unhandled exception after response started on {Method} {Path}",
+                context.Request.Method, context.Request.Path);
+            ExceptionDispatchInfo.Capture(ex).Throw();
+            return;
+        }
+
         var (status, code, title, detail, errors) = Classify(ex);
 
         if (status == StatusCodes.Status500InternalServerError)
@@ -51,21 +67,7 @@ public class ExceptionMiddleware
             _logger.LogWarning(ex, "Handled exception [{Status}] on {Method} {Path}",
                 status, context.Request.Method, context.Request.Path);
 
-        var problem = new ProblemDetails
-        {
-            Type = $"https://httpstatuses.io/{status}",
-            Title = title,
-            Status = status,
-            Detail = detail,
-            Instance = context.Request.Path,
-        };
-
-        if (context.Items.TryGetValue(CorrelationIdMiddleware.HeaderName, out var cid))
-            problem.Extensions["correlationId"] = cid;
-        problem.Extensions["code"] = code;
-
-        if (errors is not null)
-            problem.Extensions["errors"] = errors;
+        var problem = ApiProblemDetails.Create(context, status, code, title, detail, errors);
 
         context.Response.ContentType = "application/problem+json";
         context.Response.StatusCode = status;

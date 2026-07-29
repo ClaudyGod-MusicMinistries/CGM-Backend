@@ -21,7 +21,7 @@ public class CreateOrderCommandHandlerTests
         db.Products.Add(product);
         await db.SaveChangesAsync();
         var handler = new CreateOrderCommandHandler(db, Substitute.For<IPaystackService>());
-        var request = BuildRequest(product.Id, clientPrice: 1m, subtotal: 1m, total: 6m);
+        var request = BuildRequest(product.Id, clientPrice: 1m, subtotal: 1m, total: 10.99m);
 
         var act = () => handler.Handle(new CreateOrderCommand(request), CancellationToken.None);
 
@@ -39,15 +39,35 @@ public class CreateOrderCommandHandlerTests
         db.Products.Add(product);
         await db.SaveChangesAsync();
         var handler = new CreateOrderCommandHandler(db, Substitute.For<IPaystackService>());
-        var request = BuildRequest(product.Id, clientPrice: 50m, subtotal: 100m, total: 105m);
+        var request = BuildRequest(product.Id, clientPrice: 50m, subtotal: 100m, total: 109.99m);
 
         var id = await handler.Handle(new CreateOrderCommand(request), CancellationToken.None);
 
         var order = await db.Orders.SingleAsync(x => x.Id == id);
         order.Subtotal.Should().Be(100m);
-        order.Total.Should().Be(105m);
+        order.ShippingCost.Should().Be(9.99m);
+        order.Total.Should().Be(109.99m);
         order.ItemsJson.Should().Contain("50");
         product.Quantity.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task Handle_ClientAttemptsToReduceShipping_RejectsOrder()
+    {
+        await using var db = CreateContext();
+        var product = Product.Create("Premium Shirt", "Official shirt", 50m,
+            "https://example.com/shirt.jpg", "apparel", quantity: 5);
+        db.Products.Add(product);
+        await db.SaveChangesAsync();
+        var handler = new CreateOrderCommandHandler(db, Substitute.For<IPaystackService>());
+        var request = BuildRequest(product.Id, clientPrice: 50m, subtotal: 100m,
+            total: 100m, shippingCost: 0m);
+
+        var act = () => handler.Handle(new CreateOrderCommand(request), CancellationToken.None);
+
+        await act.Should().ThrowAsync<DomainException>()
+            .WithMessage("*current product catalog*");
+        (await db.Orders.CountAsync()).Should().Be(0);
     }
 
     private static ApplicationDbContext CreateContext()
@@ -59,7 +79,7 @@ public class CreateOrderCommandHandlerTests
     }
 
     private static CreateOrderRequest BuildRequest(Guid productId, decimal clientPrice,
-        decimal subtotal, decimal total) => new(
+        decimal subtotal, decimal total, decimal shippingCost = 9.99m) => new(
         [new LineItem(productId.ToString(), "Client supplied name", clientPrice, 2,
             "client-image", "client-category", "client-description")],
         new ShippingInfo("Test Buyer", "buyer@example.com", "+1234567890",
@@ -67,7 +87,7 @@ public class CreateOrderCommandHandlerTests
         "standard",
         "bank_transfer",
         subtotal,
-        5m,
+        shippingCost,
         total,
         "USD",
         null);

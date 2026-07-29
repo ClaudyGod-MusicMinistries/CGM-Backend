@@ -2,7 +2,7 @@
 
 This is the developer-facing reference for the ClaudyGod Music Ministries backend API — a .NET 8 Clean Architecture REST API. It covers the architecture, the auth model, the two response shapes you'll encounter, and every endpoint across all 18 controllers.
 
-This document is hand-authored rather than generated from Swagger, because the two most operationally important facts about this API — which endpoints require an API key, and the dual error-response shape — are middleware-level behavior that reflection-based tools like Swashbuckle cannot see and that no controller currently annotates.
+This document complements generated Swagger with operational conventions such as the secure fallback authorization policy, stable error codes, and endpoint-specific abuse controls.
 
 ---
 
@@ -59,33 +59,28 @@ Any thrown exception (NotFoundException, DomainException, ServiceUnavailableExce
 
 ### Rate limiting
 
-Three policies (`Program.cs`), per-IP, fixed window:
+Named policies (`Program.cs`), per-IP, fixed window:
 
 | Policy | Limit | Applies to |
 |---|---|---|
 | `global` | 100 req / 60s | Every request (default) |
 | `auth` | 10 req / 5min | `AuthController` |
 | `ai` | 10 req / 1min | `AIController` |
+| `comments` | 8 req / 10min | anonymous comments and reactions |
+| `subscription` | 5 req / 1hour | subscribe and unsubscribe |
+| `public-form` | 10 req / 10min | booking, contact, prayer, volunteer, ticket and YouTube helpers |
+| `commerce` | 5 req / 5min | checkout and payment recording |
 
 Exceeding a limit returns `429` with a `Retry-After` header.
 
 ### Authorization model — secure by default
 
-Authorization uses three explicit endpoint classes:
+Authorization uses two explicit endpoint classes:
 
-- `[PublicEndpoint]`: anonymous and does not require an API key. This marker implements ASP.NET's anonymous-endpoint contract as well as bypassing `ApiKeyMiddleware`.
-- `[AllowAnonymous]`: does not require a JWT, but still requires `x-api-key`. This is used for traffic that must pass through the trusted website backend/proxy.
-- No anonymous marker: the global fallback policy requires an `Admin` or `SuperAdmin` JWT, and `ApiKeyMiddleware` independently requires a valid server-to-server key. Administrative routes therefore require both controls.
+- `[PublicEndpoint]` or `[AllowAnonymous]`: intentionally anonymous. Public mutations also require a named rate-limit policy.
+- No anonymous marker: the global fallback policy requires an authenticated `Admin` or `SuperAdmin` JWT.
 
 Audit identity is derived only from validated JWT claims. Caller-supplied `x-actor-id` and `x-actor-email` headers are never trusted.
-
-| Controller | Requires `x-api-key`? |
-|---|---|
-| Auth, AI, Booking, Contact, FAQ, Ticket, Volunteer | **No** — `[PublicEndpoint]` |
-| Album, Blog, Event, Media, PrayerRequest, Reel, Payment, Store, Subscriber, Youtube, Admin | **Yes** |
-| `/health`, `/healthz` | No (framework-level, exempted directly in the middleware) |
-
-If you're integrating a new client against this API and reads are coming back `401 Missing or invalid API key`, this table is why — check whether the controller you're calling is in the public list, and if not, send a valid key from `Security:ApiKeys` config as `x-api-key`.
 
 ---
 
@@ -116,12 +111,14 @@ All middleware, authentication, authorization, model-binding, rate-limit, valida
   "status": 422,
   "detail": "One or more validation errors occurred. See 'errors' for details.",
   "instance": "/api/v1.0/payments/paystack/record",
+  "code": "VALIDATION_FAILED",
+  "traceId": "...",
   "correlationId": "...",
   "errors": { "email": ["A valid email address is required."] }
 }
 ```
 
-Clients should treat `status`, `title`, `detail`, `correlationId`, and the optional field-name-to-messages `errors` extension as the stable error contract.
+Clients should branch on `code`, use `detail` for readable guidance, map the optional field-name-to-messages `errors` extension to forms, and provide `correlationId` to support.
 
 ---
 
@@ -151,12 +148,12 @@ Password policy (register): 8+ chars, upper/lower/digit/special character requir
 
 Returns `503` (ProblemDetails, `ServiceUnavailableException`) if `AIProvider:ApiKey` isn't configured.
 
-### EventController — `/events` · requires API key for reads/writes, admin for mutation
+### EventController — `/events` · public reads, admin mutation
 
 | Method | Path | Auth | Request | Response |
 |---|---|---|---|---|
-| GET | `` | API key | `?page&pageSize&status` | `PaginatedResult<EventDto>` |
-| GET | `/{id}` | API key | — | `EventDetailDto` |
+| GET | `` | none | `?page&pageSize&status` | `PaginatedResult<EventDto>` |
+| GET | `/{id}` | none | — | `EventDetailDto` |
 | POST | `` | Admin/SuperAdmin | `CreateEventCommand` fields | `{id}` |
 | PATCH | `/{id}/status` | Admin/SuperAdmin | `{status}` | — |
 
@@ -201,7 +198,7 @@ Returns `503` (ProblemDetails, `ServiceUnavailableException`) if `AIProvider:Api
 
 | Method | Path | Auth | Request | Response |
 |---|---|---|---|---|
-| POST | `` | API key | `{name, email, subject, requestText, isConfidential?}` | `{id}` |
+| POST | `` | none | `{name, email, subject, requestText, isConfidential?}` | `{id}` |
 | GET | `` | Admin/SuperAdmin | `?page&pageSize&status&includeConfidential` | `PaginatedResult<PrayerRequestDto>` |
 
 Sends a confirmation email ("prayer-received" template) on success — a template send failure is logged, not thrown (best-effort, doesn't fail the request).
@@ -213,19 +210,19 @@ Sends a confirmation email ("prayer-received" template) on success — a templat
 | GET | `` | `?category` | flat `FAQDto[]` — **not paginated** |
 | GET | `/categories/{category}` | — | flat `FAQDto[]` |
 
-### BlogController — `/blog` · reads require API key, writes admin
+### BlogController — `/blog` · public reads, admin writes
 
 | Method | Path | Auth | Request | Response |
 |---|---|---|---|---|
-| GET | `` | API key | `?page&pageSize&tag` | `PaginatedResult<BlogPostDto>` (list DTO has no `content`) |
-| GET | `/{slug}` | API key | — | `BlogPostDetailDto` (has `content`) |
+| GET | `` | none | `?page&pageSize&tag` | `PaginatedResult<BlogPostDto>` (list DTO has no `content`) |
+| GET | `/{slug}` | none | — | `BlogPostDetailDto` (has `content`) |
 | POST | `` | Admin/SuperAdmin | title/slug/content/... | `{id}` |
 | PUT | `/{id}` | Admin/SuperAdmin | same shape | — |
 | DELETE | `/{id}` | Admin/SuperAdmin | — | — |
 
 Slug must match `^[a-z0-9-]+$`.
 
-### AlbumController — `/albums` · requires API key
+### AlbumController — `/albums` · public reads
 
 | Method | Path | Response |
 |---|---|---|
@@ -233,7 +230,7 @@ Slug must match `^[a-z0-9-]+$`.
 
 `AlbumDto`: `{id, title, imageUrl?, spotifyUrl?, appleUrl?, youtubeUrl?, deezerUrl?, amazonUrl?, sortOrder, releasedAt?}`. Note: no `artist`, `description`, or `tracks` field — this is a curated links/artwork record, not a full album model.
 
-### ReelController — `/reels` · requires API key
+### ReelController — `/reels` · public reads
 
 | Method | Path | Response |
 |---|---|---|
@@ -241,11 +238,11 @@ Slug must match `^[a-z0-9-]+$`.
 
 `ReelDto`: `{id, title, description?, videoUrl, thumbnailUrl?, category, isPublished, publishedAt?, sortOrder}`. Category vocabulary: `featured, sermon, teaching, music_video, live, christmas`. Distinct from `MediaController` — curated highlight reels, not general uploads.
 
-### MediaController — `/media` · reads require API key, writes admin
+### MediaController — `/media` · public reads, admin writes
 
 | Method | Path | Auth | Request | Response |
 |---|---|---|---|---|
-| GET | `` | API key | `?page&pageSize&type&isPublished` | `PaginatedResult<MediaItemDto>` |
+| GET | `` | none | `?page&pageSize&type&isPublished` | `PaginatedResult<MediaItemDto>` |
 | POST | `` | Admin/SuperAdmin | file upload | `{id}` |
 
 `MediaItemDto`: `{id, title, description?, type, fileName, contentType, fileSizeBytes, publicUrl, thumbnailPath?, artistName?, albumName?, durationSeconds?, isPublished, viewCount, downloadCount, createdAt}`. Filters by `type` (image/video/audio) — **there is no `category` field or filter**, despite that being a common assumption.
@@ -258,7 +255,7 @@ Slug must match `^[a-z0-9-]+$`.
 
 Validates `videoId` against `^[a-zA-Z0-9_-]{11}$`; builds a `youtube-nocookie.com` embed URL server-side so raw video IDs aren't exposed unnecessarily.
 
-### PaymentController — `/payments` · requires API key
+### PaymentController — `/payments` · public payment callbacks with verification and rate limits
 
 | Method | Path | Request | Response |
 |---|---|---|---|
@@ -269,7 +266,7 @@ Validates `videoId` against `^[a-zA-Z0-9_-]{11}$`; builds a `youtube-nocookie.co
 
 Zelle and NGN bank transfer have no verification API and are always recorded as pending for manual admin review — this is by design, not a gap. Paystack is verified server-side (amount/currency/status cross-checked against Paystack's `/transaction/verify` endpoint) and returns `503` if the gateway secret key isn't configured yet.
 
-### StoreController — `/store` · requires API key
+### StoreController — `/store` · public catalog/checkout, admin catalog mutation
 
 | Method | Path | Request | Response |
 |---|---|---|---|
@@ -295,7 +292,7 @@ Zelle and NGN bank transfer have no verification API and are always recorded as 
 
 ## 5. Health check
 
-`GET /healthz` (no version prefix, no API key) returns:
+`GET /healthz` (no version prefix, no authentication) returns:
 
 ```json
 { "status": "healthy", "timestamp": "...", "checks": [{"name": "database", "status": "healthy", "duration": 2.1}, {"name": "redis", "status": "healthy", "duration": 0.4}] }

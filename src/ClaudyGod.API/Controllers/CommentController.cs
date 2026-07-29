@@ -12,7 +12,7 @@ namespace ClaudyGod.API.Controllers;
 // Admin moderation surface for comments left on Blog posts — not post-scoped
 // (lists across every post), so this stays a separate top-level controller
 // from BlogController's own post-scoped public comment/like actions.
-// x-api-key-only, same trust boundary as every other admin-write endpoint.
+// Protected by the secure admin fallback policy, like every other admin-write endpoint.
 [ApiController]
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/comments")]

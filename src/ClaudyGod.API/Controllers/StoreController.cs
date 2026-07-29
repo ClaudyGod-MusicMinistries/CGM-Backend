@@ -51,6 +51,7 @@ public class StoreController : ControllerBase
     }
 
     [Microsoft.AspNetCore.Authorization.AllowAnonymous]
+    [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("commerce")]
     [HttpPost("checkout")]
     public async Task<ActionResult<ApiResponse<object>>> Checkout(
         [FromBody] CreateOrderRequest request, CancellationToken ct)

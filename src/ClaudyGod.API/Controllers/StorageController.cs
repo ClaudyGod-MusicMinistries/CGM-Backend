@@ -8,7 +8,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace ClaudyGod.API.Controllers;
 
 /// <summary>
-/// The website's presigned-S3 upload pipeline. Protected by ApiKeyMiddleware
+/// The website's presigned-S3 upload pipeline. Protected by the global admin
+/// authorization policy
 /// like every other non-public controller — no extra auth attribute needed;
 /// services/api's requireAdmin() is the real per-admin authorization boundary
 /// upstream of this proxy call.

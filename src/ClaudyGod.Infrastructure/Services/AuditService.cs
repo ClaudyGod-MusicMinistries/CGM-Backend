@@ -31,18 +31,19 @@ public class AuditService : IAuditService
         {
             var log = new AuditLog
             {
-                UserId = _currentUser.UserId ?? "anonymous",
-                UserEmail = _currentUser.UserEmail ?? string.Empty,
-                Action = action,
-                EntityType = entityType,
-                EntityId = entityId,
+                UserId = Truncate(_currentUser.UserId ?? "anonymous", 100),
+                UserEmail = Truncate(_currentUser.UserEmail ?? string.Empty, 256),
+                Action = Truncate(action, 100),
+                EntityType = Truncate(entityType, 100),
+                EntityId = entityId is null ? null : Truncate(entityId, 100),
                 OldValues = oldValues is null ? null : JsonSerializer.Serialize(oldValues),
                 NewValues = newValues is null ? null : JsonSerializer.Serialize(newValues),
-                IpAddress = _currentUser.IpAddress ?? string.Empty,
-                UserAgent = _httpContextAccessor.HttpContext?.Request.Headers.UserAgent.ToString() ?? string.Empty,
+                IpAddress = Truncate(_currentUser.IpAddress ?? string.Empty, 50),
+                UserAgent = Truncate(
+                    _httpContextAccessor.HttpContext?.Request.Headers.UserAgent.ToString() ?? string.Empty, 512),
                 Timestamp = DateTime.UtcNow,
                 Succeeded = succeeded,
-                FailureReason = failureReason
+                FailureReason = failureReason is null ? null : Truncate(failureReason, 500)
             };
 
             _db.AuditLogs.Add(log);
@@ -53,4 +54,7 @@ public class AuditService : IAuditService
             _logger.LogError(ex, "Failed to write audit log for action {Action}", action);
         }
     }
+
+    private static string Truncate(string value, int maximum) =>
+        value.Length <= maximum ? value : value[..maximum];
 }

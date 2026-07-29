@@ -5,7 +5,6 @@ namespace ClaudyGod.API.Tests.Infrastructure;
 
 public sealed class ApiFactory : WebApplicationFactory<Program>
 {
-    public const string ApiKey = "integration-test-api-key-at-least-32-bytes";
     public const string JwtKey = "integration-test-jwt-signing-key-at-least-32-bytes";
     public const string JwtIssuer = "ClaudyGod.API.Tests";
     public const string JwtAudience = "ClaudyGod.API.Tests.Client";
@@ -19,7 +18,6 @@ public sealed class ApiFactory : WebApplicationFactory<Program>
         builder.UseSetting("Jwt:Key", JwtKey);
         builder.UseSetting("Jwt:Issuer", JwtIssuer);
         builder.UseSetting("Jwt:Audience", JwtAudience);
-        builder.UseSetting("Security:ApiKeys:0", ApiKey);
         builder.UseSetting("Storage:Website:S3Endpoint", "https://storage.invalid/s3");
         builder.UseSetting("Storage:Website:S3Region", "us-east-1");
         builder.UseSetting("Storage:Website:S3AccessKeyId", "integration-test-access-key");

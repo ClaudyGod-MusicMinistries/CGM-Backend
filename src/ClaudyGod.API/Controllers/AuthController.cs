@@ -15,7 +15,6 @@ namespace ClaudyGod.API.Controllers;
 [ApiVersion("1.0")]
 [Route("api/v{version:apiVersion}/auth")]
 [EnableRateLimiting("auth")]
-[PublicEndpoint]
 public sealed class AuthController : ControllerBase
 {
     private const string RefreshCookieName = "cgm_refresh_token";
