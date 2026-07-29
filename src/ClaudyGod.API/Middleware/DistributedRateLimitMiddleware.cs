@@ -15,8 +15,12 @@ public sealed class DistributedRateLimitMiddleware(RequestDelegate next, ILogger
     private static readonly IReadOnlyDictionary<string, (int Limit, int Seconds)> Policies =
         new Dictionary<string, (int, int)>(StringComparer.Ordinal)
         {
-            ["ai"] = (10, 60), ["auth"] = (10, 300), ["comments"] = (8, 600),
-            ["subscription"] = (5, 3600), ["public-form"] = (10, 600), ["commerce"] = (5, 300)
+            ["ai"] = (10, 60),
+            ["auth"] = (10, 300),
+            ["comments"] = (8, 600),
+            ["subscription"] = (5, 3600),
+            ["public-form"] = (10, 600),
+            ["commerce"] = (5, 300)
         };
 
     public async Task InvokeAsync(HttpContext context, IConnectionMultiplexer redis, IConfiguration configuration)

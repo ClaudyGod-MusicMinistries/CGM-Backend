@@ -12,4 +12,5 @@ public sealed class OutboxMessage : BaseEntity
     public string? LastError { get; set; }
     public DateTime? LockedUntil { get; set; }
     public string? LockOwner { get; set; }
+    public uint Version { get; set; }
 }

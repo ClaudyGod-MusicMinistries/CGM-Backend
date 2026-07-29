@@ -17,5 +17,6 @@ public sealed class OutboxMessageConfiguration : IEntityTypeConfiguration<Outbox
         builder.Property(x => x.LockOwner).HasMaxLength(128);
         builder.HasIndex(x => new { x.ProcessedAt, x.AvailableAt });
         builder.HasIndex(x => x.LockedUntil);
+        builder.Property(x => x.Version).IsRowVersion();
     }
 }

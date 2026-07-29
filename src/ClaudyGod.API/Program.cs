@@ -21,6 +21,10 @@ using Serilog.Events;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using StackExchange.Redis;
+using OpenTelemetry.Logs;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
+using OpenTelemetry.Trace;
 
 Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
@@ -82,6 +86,31 @@ try
         .Enrich.FromLogContext()
         .WriteTo.Console()
         .WriteTo.File("logs/log-.txt", rollingInterval: RollingInterval.Day, retainedFileCountLimit: 30));
+
+    var otlpEndpoint = builder.Configuration["OpenTelemetry:OtlpEndpoint"];
+    var serviceName = builder.Configuration["OpenTelemetry:ServiceName"] ?? "ClaudyGod.API";
+    if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+    {
+        var endpoint = new Uri(otlpEndpoint);
+        builder.Logging.AddOpenTelemetry(options =>
+        {
+            options.IncludeFormattedMessage = true;
+            options.IncludeScopes = true;
+            options.SetResourceBuilder(ResourceBuilder.CreateDefault().AddService(serviceName));
+            options.AddOtlpExporter(exporter => exporter.Endpoint = endpoint);
+        });
+        builder.Services.AddOpenTelemetry()
+            .ConfigureResource(resource => resource.AddService(serviceName))
+            .WithTracing(tracing => tracing.AddAspNetCoreInstrumentation()
+                .AddHttpClientInstrumentation().AddOtlpExporter(exporter => exporter.Endpoint = endpoint))
+            .WithMetrics(metrics => metrics.AddAspNetCoreInstrumentation()
+                .AddHttpClientInstrumentation().AddRuntimeInstrumentation()
+                .AddOtlpExporter(exporter => exporter.Endpoint = endpoint));
+    }
+    else if (builder.Environment.IsProduction())
+    {
+        Log.Warning("OpenTelemetry:OtlpEndpoint is not configured; central telemetry export is disabled.");
+    }
 
     // Application + Infrastructure layers
     builder.Services.AddApplication();
