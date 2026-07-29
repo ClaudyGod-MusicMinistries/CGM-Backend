@@ -11,7 +11,7 @@ public class HealthEndpointTests : IClassFixture<ApiFactory>
     public HealthEndpointTests(ApiFactory factory) => _factory = factory;
 
     [Fact]
-    public async Task Liveness_DoesNotRequireApiKeyOrExternalDependencies()
+    public async Task Liveness_DoesNotRequireAuthenticationOrExternalDependencies()
     {
         using var client = _factory.CreateClient();
 

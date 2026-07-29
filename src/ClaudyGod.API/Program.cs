@@ -73,14 +73,6 @@ try
             throw new InvalidOperationException("Jwt:Issuer and Jwt:Audience must be configured in production.");
     }
 
-    var configuredApiKeys = builder.Configuration.GetSection("Security:ApiKeys").Get<string[]>()
-        ?.Where(key => !string.IsNullOrWhiteSpace(key))
-        .ToArray() ?? [];
-    if (builder.Environment.IsProduction() && configuredApiKeys.Length == 0)
-        throw new InvalidOperationException("At least one Security:ApiKeys entry is required in production.");
-    if (configuredApiKeys.Any(key => Encoding.UTF8.GetByteCount(key) < 32))
-        throw new InvalidOperationException("Every Security:ApiKeys entry must be at least 32 bytes.");
-
     // Serilog
     builder.Host.UseSerilog((ctx, lc) => lc
         .ReadFrom.Configuration(ctx.Configuration)
@@ -266,7 +258,26 @@ try
                 throw new InvalidOperationException($"ReverseProxy:KnownProxies contains invalid IP address '{value}'.");
             options.KnownProxies.Add(address);
         }
+
+        foreach (var value in builder.Configuration.GetSection("ReverseProxy:KnownNetworks").Get<string[]>() ?? [])
+        {
+            var parts = value.Split('/', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length != 2 || !System.Net.IPAddress.TryParse(parts[0], out var prefix) ||
+                !int.TryParse(parts[1], out var prefixLength) || prefixLength < 0 ||
+                prefixLength > (prefix.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork ? 32 : 128))
+                throw new InvalidOperationException(
+                    $"ReverseProxy:KnownNetworks contains invalid CIDR network '{value}'.");
+
+            options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(prefix, prefixLength));
+        }
     });
+
+    if (builder.Environment.IsProduction() &&
+        (builder.Configuration.GetSection("ReverseProxy:KnownProxies").Get<string[]>()?.Length ?? 0) == 0 &&
+        (builder.Configuration.GetSection("ReverseProxy:KnownNetworks").Get<string[]>()?.Length ?? 0) == 0)
+    {
+        Log.Warning("No trusted reverse proxy is configured. Forwarded client IPs will be ignored and per-IP rate limits may group traffic by proxy address.");
+    }
 
     // Redis distributed cache
     var redisConn = builder.Configuration["Redis:ConnectionString"] ?? "localhost:6379";

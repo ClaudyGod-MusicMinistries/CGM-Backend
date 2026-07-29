@@ -60,12 +60,13 @@ public class ExceptionMiddleware
 
         var (status, code, title, detail, errors) = Classify(ex);
 
-        if (status == StatusCodes.Status500InternalServerError)
+        if (status >= StatusCodes.Status500InternalServerError)
             _logger.LogError(ex, "Unhandled exception on {Method} {Path}",
                 context.Request.Method, context.Request.Path);
         else
-            _logger.LogWarning(ex, "Handled exception [{Status}] on {Method} {Path}",
-                status, context.Request.Method, context.Request.Path);
+            _logger.LogInformation(
+                "Request rejected Status={Status} Code={Code} ExceptionType={ExceptionType} Method={Method} Path={Path}",
+                status, code, ex.GetType().Name, context.Request.Method, context.Request.Path);
 
         var problem = ApiProblemDetails.Create(context, status, code, title, detail, errors);
 
