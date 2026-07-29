@@ -82,14 +82,29 @@ jobs:
           --collect:"XPlat Code Coverage"
           --results-directory TestResults
 
-      - name: Upload test and coverage results
+      # The organization action policy does not permit third-party artifact steps.
+      # Test failures remain visible in the job log, and this summary records the
+      # generated TRX/coverage files without relying on an unapproved action.
+      - name: Publish test results summary
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-test-results-${{ github.run_id }}
-          path: TestResults
-          if-no-files-found: warn
-          retention-days: 14
+        shell: bash
+        run: |
+          {
+            echo "### Backend verification"
+            echo
+
+            if [ ! -d TestResults ]; then
+              echo "No test result directory was generated. Review the test step logs."
+              exit 0
+            fi
+
+            trx_count="$(find TestResults -type f -name '*.trx' | wc -l | tr -d ' ')"
+            coverage_count="$(find TestResults -type f -name 'coverage.cobertura.xml' | wc -l | tr -d ' ')"
+
+            echo "- Test result files: ${trx_count}"
+            echo "- Coverage reports: ${coverage_count}"
+            echo "- Full test output: available in the **Test** step log"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ─── Build + Push ────────────────────────────────────────────────────────────
   build:
