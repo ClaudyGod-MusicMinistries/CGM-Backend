@@ -42,7 +42,7 @@ public class ExceptionMiddleware
 
     private async Task HandleAsync(HttpContext context, Exception ex)
     {
-        var (status, title, detail, errors) = Classify(ex);
+        var (status, code, title, detail, errors) = Classify(ex);
 
         if (status == StatusCodes.Status500InternalServerError)
             _logger.LogError(ex, "Unhandled exception on {Method} {Path}",
@@ -63,6 +63,8 @@ public class ExceptionMiddleware
         if (context.Items.TryGetValue(CorrelationIdMiddleware.HeaderName, out var cid))
             problem.Extensions["correlationId"] = cid;
 
+        problem.Extensions["code"] = code;
+
         if (errors is not null)
             problem.Extensions["errors"] = errors;
 
@@ -72,48 +74,48 @@ public class ExceptionMiddleware
         await context.Response.WriteAsync(JsonSerializer.Serialize(problem, JsonOptions));
     }
 
-    private static (int status, string title, string detail, IDictionary<string, string[]>? errors)
+    private static (int status, string code, string title, string detail, IDictionary<string, string[]>? errors)
         Classify(Exception ex) => ex switch
     {
         NotFoundException nfe =>
-            (StatusCodes.Status404NotFound,
+            (StatusCodes.Status404NotFound, "RESOURCE_NOT_FOUND",
              "Resource Not Found",
              nfe.Message, null),
 
         DuplicateResourceException dre =>
-            (StatusCodes.Status409Conflict,
+            (StatusCodes.Status409Conflict, "ALREADY_EXISTS",
              "Conflict",
              dre.Message, null),
 
         ValidationException ve =>
-            (StatusCodes.Status422UnprocessableEntity,
+            (StatusCodes.Status422UnprocessableEntity, "VALIDATION_FAILED",
              "Validation Failed",
              "One or more validation errors occurred. See 'errors' for details.",
              (IDictionary<string, string[]>)new Dictionary<string, string[]>(ve.Errors)),
 
         Application.Common.Exceptions.ValidationException ave =>
-            (StatusCodes.Status422UnprocessableEntity,
+            (StatusCodes.Status422UnprocessableEntity, "VALIDATION_FAILED",
              "Validation Failed",
              "One or more validation errors occurred. See 'errors' for details.",
              ave.Errors),
 
         ServiceUnavailableException sue =>
-            (StatusCodes.Status503ServiceUnavailable,
+            (StatusCodes.Status503ServiceUnavailable, "SERVICE_UNAVAILABLE",
              "Service Unavailable",
              sue.Message, null),
 
         DomainException de =>
-            (StatusCodes.Status400BadRequest,
+            (StatusCodes.Status400BadRequest, "BUSINESS_RULE_VIOLATION",
              "Business Rule Violation",
              de.Message, null),
 
         UnauthorizedAccessException =>
-            (StatusCodes.Status401Unauthorized,
+            (StatusCodes.Status401Unauthorized, "AUTHENTICATION_REQUIRED",
              "Unauthorized",
              "Authentication is required to access this resource.", null),
 
         _ =>
-            (StatusCodes.Status500InternalServerError,
+            (StatusCodes.Status500InternalServerError, "UNEXPECTED_ERROR",
              "Internal Server Error",
              "An unexpected error occurred. Please try again later.", null),
     };

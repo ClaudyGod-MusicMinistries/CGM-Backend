@@ -6,6 +6,7 @@ using ClaudyGod.Infrastructure;
 using ClaudyGod.Infrastructure.Persistence;
 using ClaudyGod.API.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -75,6 +76,39 @@ try
             options.JsonSerializerOptions.DictionaryKeyPolicy = JsonNamingPolicy.CamelCase;
             options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
         });
+    builder.Services.Configure<ApiBehaviorOptions>(options =>
+    {
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var errors = context.ModelState
+                .Where(entry => entry.Value?.Errors.Count > 0)
+                .ToDictionary(
+                    entry => string.IsNullOrWhiteSpace(entry.Key) ? "request" : entry.Key,
+                    entry => entry.Value!.Errors
+                        .Select(error => string.IsNullOrWhiteSpace(error.ErrorMessage)
+                            ? "The supplied value is not valid."
+                            : error.ErrorMessage)
+                        .ToArray());
+
+            var problem = new ProblemDetails
+            {
+                Type = "https://httpstatuses.io/400",
+                Title = "Please check the information you entered",
+                Status = StatusCodes.Status400BadRequest,
+                Detail = "Some information was missing or invalid. Correct the highlighted fields and try again.",
+                Instance = context.HttpContext.Request.Path
+            };
+            problem.Extensions["code"] = "INVALID_REQUEST";
+            problem.Extensions["errors"] = errors;
+            if (context.HttpContext.Items.TryGetValue(CorrelationIdMiddleware.HeaderName, out var correlationId))
+                problem.Extensions["correlationId"] = correlationId;
+
+            return new BadRequestObjectResult(problem)
+            {
+                ContentTypes = { "application/problem+json" }
+            };
+        };
+    });
     builder.Services.AddEndpointsApiExplorer();
 
     // API Versioning
@@ -230,6 +264,22 @@ try
             });
         });
 
+        // Newsletter submissions are intentionally public, but tightly limited to
+        // reduce automated sign-up abuse without exposing a secret to the browser.
+        options.AddPolicy("subscription", ctx =>
+        {
+            var ip = ctx.Request.Headers["CF-Connecting-IP"].FirstOrDefault()
+                     ?? ctx.Connection.RemoteIpAddress?.ToString()
+                     ?? "unknown";
+            return RateLimitPartition.GetFixedWindowLimiter($"subscription:{ip}", _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromHours(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+        });
+
         options.OnRejected = async (ctx, token) =>
         {
             ctx.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
@@ -239,7 +289,9 @@ try
             var json = JsonSerializer.Serialize(new
             {
                 success = false,
-                message = $"Rate limit exceeded. Please retry after {retryAfter} seconds."
+                code = "TOO_MANY_REQUESTS",
+                message = "You have made too many requests. Please wait a little while and try again.",
+                retryAfterSeconds = retryAfter
             });
             await ctx.HttpContext.Response.WriteAsync(json, token);
         };
@@ -272,7 +324,6 @@ try
     }
 
     app.UseMiddleware<SecurityHeadersMiddleware>();
-    app.UseMiddleware<ApiKeyMiddleware>();
     app.UseMiddleware<ExceptionMiddleware>();
 
     app.UseHttpsRedirection();

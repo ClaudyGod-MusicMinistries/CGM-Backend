@@ -22,12 +22,35 @@ public class MediaController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<ApiResponse<PaginatedResult<MediaItemDto>>>> GetAll(
         [FromQuery] int page = 1, [FromQuery] int pageSize = 20,
-        [FromQuery] MediaType? type = null,
+        [FromQuery] string? type = null,
         [FromQuery] bool? isPublished = null,
         CancellationToken ct = default)
     {
-        var result = await _mediator.Send(new GetMediaQuery(page, pageSize, type, isPublished), ct);
+        var mediaType = ParseMediaType(type);
+        var result = await _mediator.Send(new GetMediaQuery(page, pageSize, mediaType, isPublished), ct);
         return Ok(ApiResponse<PaginatedResult<MediaItemDto>>.Ok(result));
+    }
+
+    private static MediaType? ParseMediaType(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        var normalized = value.Trim().Replace("-", string.Empty).Replace("_", string.Empty);
+        if (normalized.Equals("video", StringComparison.OrdinalIgnoreCase))
+            return MediaType.SermonVideo;
+        if (normalized.Equals("audio", StringComparison.OrdinalIgnoreCase))
+            return MediaType.SermonAudio;
+
+        if (Enum.TryParse<MediaType>(normalized, true, out var mediaType) &&
+            Enum.IsDefined(mediaType))
+            return mediaType;
+
+        throw new ClaudyGod.Domain.Exceptions.ValidationException(
+            new Dictionary<string, string[]>
+            {
+                ["type"] = ["Choose one of: video, audio, music, photo, or other."]
+            });
     }
 
     [Authorize(Roles = "Admin,SuperAdmin")]

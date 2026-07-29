@@ -6,6 +6,7 @@ using ClaudyGod.Application.Features.Subscribers.Queries;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace ClaudyGod.API.Controllers;
 
@@ -19,6 +20,7 @@ public class SubscriberController : ControllerBase
     public SubscriberController(IMediator mediator) => _mediator = mediator;
 
     [HttpPost]
+    [EnableRateLimiting("subscription")]
     public async Task<ActionResult<ApiResponse<object>>> Subscribe(
         [FromBody] SubscribeRequestDto dto, CancellationToken ct)
     {
@@ -27,6 +29,7 @@ public class SubscriberController : ControllerBase
     }
 
     [HttpDelete("unsubscribe")]
+    [EnableRateLimiting("subscription")]
     public async Task<ActionResult<ApiResponse>> Unsubscribe(
         [FromQuery] string email, [FromQuery] string token, CancellationToken ct)
     {
